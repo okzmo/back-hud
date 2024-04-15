@@ -8,25 +8,19 @@ import (
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
+
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.CORS())
 
 	e.GET("/", s.HelloWorldHandler)
-
 	e.GET("/health", s.healthHandler)
 
+	// Auth
+	e.GET("/auth/:provider", s.ProviderLoginHandler)
+	e.GET("/auth/:provider/callback", s.AuthCallbackHandler)
+	e.GET("/auth/logout/:provider", s.LogoutHandler)
+
 	return e
-}
-
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	resp := map[string]string{
-		"message": "Hello World",
-	}
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) healthHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.db.Health())
 }

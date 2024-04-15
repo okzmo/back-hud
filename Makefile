@@ -6,7 +6,7 @@ all: build
 build:
 	@echo "Building..."
 	
-	@go build -o main cmd/api/main.go
+	@go build -o main cmd/api/main.go && gtp --in="./internal/models/models.go" --out="../hudori_front/src/lib/types/types.d.ts" --namespace="Hudori"
 
 # Run the application
 run:

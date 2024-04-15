@@ -9,21 +9,30 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"goback/internal/auth"
 	"goback/internal/database"
 )
 
 type Server struct {
 	port int
-
-	db database.Service
+	auth auth.Service
+	db   database.Service
 }
 
 func NewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
+
+	sessionStore := auth.NewCookieStore(auth.SessionOptions{
+		CookiesKey: os.Getenv("SESSION_SECRET"),
+		MaxAge:     86400 * 30,
+		Secure:     false,
+		HttpOnly:   true,
+	})
+
 	NewServer := &Server{
 		port: port,
-
-		db: database.New(),
+		auth: auth.New(sessionStore),
+		db:   database.New(),
 	}
 
 	// Declare Server config

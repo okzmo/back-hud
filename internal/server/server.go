@@ -2,15 +2,14 @@ package server
 
 import (
 	"fmt"
+	"goback/internal/auth"
+	"goback/internal/database"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
-
-	"goback/internal/auth"
-	"goback/internal/database"
 )
 
 type Server struct {
@@ -20,7 +19,10 @@ type Server struct {
 }
 
 func NewServer() *http.Server {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	port, err := strconv.Atoi(os.Getenv("PORT"))
+	if err != nil {
+		panic(err)
+	}
 
 	sessionStore := auth.NewCookieStore(auth.SessionOptions{
 		CookiesKey: os.Getenv("SESSION_SECRET"),

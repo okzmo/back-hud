@@ -1,11 +1,14 @@
 package server
 
 import (
+	"goback/internal/models"
+	"goback/internal/utils"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/alexedwards/argon2id"
 	"github.com/labstack/echo/v4"
-	"github.com/markbates/goth/gothic"
 )
 
 func (s *Server) HelloWorldHandler(c echo.Context) error {
@@ -16,68 +19,194 @@ func (s *Server) HelloWorldHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (s *Server) healthHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.db.Health())
-}
+// func (s *Server) healthHandler(c echo.Context) error {
+// 	return c.JSON(http.StatusOK, s.db.Health())
+// }
 
 // AUTH
-func (s *Server) ProviderLoginHandler(c echo.Context) error {
-	provider := c.Param("provider")
+type UserBodySignup struct {
+	Email       string `json:"email"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	Password    string `json:"password"`
+}
 
-	gothic.GetProviderName = func(req *http.Request) (string, error) {
-		return provider, nil
-	}
+func (s *Server) HandlerSignUp(c echo.Context) error {
+	resp := make(map[string]any)
 
-	if _, err := gothic.CompleteUserAuth(c.Response(), c.Request()); err == nil {
-		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:5173/chat")
-	} else {
+	body := new(UserBodySignup)
+	if err := c.Bind(body); err != nil {
 		log.Println(err)
-		gothic.BeginAuthHandler(c.Response(), c.Request())
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when creating your account."
+
+		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	return nil
+	if !utils.EmailValid(body.Email) {
+		log.Println("invalid email")
+		resp["name"] = "email"
+		resp["message"] = "The format of the email is invalid."
+
+		return c.JSON(http.StatusConflict, resp)
+	}
+
+	_, err := s.db.GetUser("", "", body.Email)
+	if err == nil {
+		resp["name"] = "email"
+		resp["message"] = "This email is unavailable."
+
+		return c.JSON(http.StatusConflict, resp)
+	}
+
+	_, err = s.db.GetUser("", body.Username, "")
+	if err == nil {
+		resp["name"] = "username"
+		resp["message"] = "This username is unavailable."
+
+		return c.JSON(http.StatusConflict, resp)
+	}
+
+	hashedPassword, err := argon2id.CreateHash(body.Password, argon2id.DefaultParams)
+	if err != nil {
+		log.Println(err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when creating your account."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	userCreated := models.User{
+		Email:       body.Email,
+		Password:    hashedPassword,
+		Username:    body.Username,
+		DisplayName: body.DisplayName,
+		Avatar:      "avatar",
+		Banner:      "banner",
+		Status:      "Online",
+	}
+
+	err = s.db.CreateUser(userCreated)
+	if err != nil {
+		log.Println("error when creating the user", err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when creating your account."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	resp["message"] = "success"
+	resp["user"] = map[string]string{
+		"username":     userCreated.Username,
+		"display_name": userCreated.DisplayName,
+		"avatar":       userCreated.Avatar,
+		"banner":       userCreated.Banner,
+		"status":       userCreated.Status,
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }
 
-func (s *Server) AuthCallbackHandler(c echo.Context) error {
-	provider := c.Param("provider")
-
-	gothic.GetProviderName = func(req *http.Request) (string, error) {
-		return provider, nil
-	}
-
-	user, err := gothic.CompleteUserAuth(c.Response(), c.Request())
-	if err != nil {
-		return err
-	}
-
-	err = s.auth.StoreUserSession(c, user)
-	if err != nil {
-		return err
-	}
-
-	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:5173/chat")
-	return nil
+type UserBodySignIn struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-func (s *Server) LogoutHandler(c echo.Context) error {
-	provider := c.Param("provider")
+func (s *Server) HandlerSignIn(c echo.Context) error {
+	resp := make(map[string]any)
 
-	gothic.GetProviderName = func(req *http.Request) (string, error) {
-		return provider, nil
+	body := new(UserBodySignIn)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["message"] = "An error occured when creating your account."
+
+		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	err := gothic.Logout(c.Response(), c.Request())
+	user, err := s.db.GetUser("", "", body.Email)
 	if err != nil {
-		return err
+		log.Println(err)
+		resp["message"] = "Please check your login information and try again."
+
+		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	s.auth.RemoveUserSession(c)
+	match, err := argon2id.ComparePasswordAndHash(body.Password, user.Password)
+	if err != nil || !match {
+		log.Println(err, match)
+		resp["message"] = "Please check your login information and try again."
 
-	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:5173/connect")
+		return c.JSON(http.StatusBadRequest, resp)
+	}
 
-	return nil
+	sessionCreated := models.Session{
+		IpAddress: c.RealIP(),
+		UserAgent: c.Request().UserAgent(),
+		UserId:    user.ID,
+	}
+
+	id, err := s.db.CreateSession(sessionCreated)
+	if err != nil {
+		log.Println("error when creating the user session", err)
+		resp["message"] = "An error occured on sign in."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	session := new(http.Cookie)
+	session.Name = "session"
+	session.Value = id
+	session.Expires = time.Now().Add(24 * time.Hour * 30)
+	session.HttpOnly = true
+	session.Secure = false
+	c.SetCookie(session)
+
+	resp["message"] = "success"
+	resp["user"] = map[string]string{
+		"username":     user.Username,
+		"display_name": user.DisplayName,
+		"avatar":       user.Avatar,
+		"banner":       user.Banner,
+		"status":       user.Status,
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }
 
-func (s *Server) LoginHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.db.Health())
+func (s *Server) HandlerVerify(c echo.Context) error {
+	resp := make(map[string]any)
+
+	sessionCookie, err := c.Cookie("session")
+	if err != nil {
+		resp["message"] = "No session cookie available."
+
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	session, err := s.db.GetSession(sessionCookie.Value)
+	if err != nil {
+		log.Println(err)
+		resp["message"] = "No session related to given id."
+
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	user, err := s.db.GetUser(session.UserId, "", "")
+	if err != nil {
+		log.Println(err)
+		resp["message"] = "No user match the given id from session."
+
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["message"] = "success"
+	resp["user"] = map[string]string{
+		"username":     user.Username,
+		"display_name": user.DisplayName,
+		"avatar":       user.Avatar,
+		"banner":       user.Banner,
+		"status":       user.Status,
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }

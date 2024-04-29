@@ -86,7 +86,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		Status:      "Online",
 	}
 
-	err = s.db.CreateUser(userCreated)
+	userId, err := s.db.CreateUser(userCreated)
 	if err != nil {
 		log.Println("error when creating the user", err)
 		resp["name"] = "unexpected"
@@ -94,6 +94,30 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
+
+	sessionCreated := models.Session{
+		IpAddress: c.RealIP(),
+		UserAgent: c.Request().UserAgent(),
+		UserId:    userId,
+	}
+
+	id, err := s.db.CreateSession(sessionCreated)
+	if err != nil {
+		log.Println("error when creating a session after creating account:", err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when trying to connect to your account."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	session := new(http.Cookie)
+	session.Name = "session"
+	session.Path = "/"
+	session.Value = id
+	session.Expires = time.Now().Add(24 * time.Hour * 30)
+	session.HttpOnly = true
+	session.Secure = false
+	c.SetCookie(session)
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
@@ -156,6 +180,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	session := new(http.Cookie)
 	session.Name = "session"
 	session.Value = id
+	session.Path = "/"
 	session.Expires = time.Now().Add(24 * time.Hour * 30)
 	session.HttpOnly = true
 	session.Secure = false

@@ -12,7 +12,7 @@ import (
 
 type Service interface {
 	// Health() map[string]string
-	CreateUser(user models.User) error
+	CreateUser(user models.User) (string, error)
 	CreateSession(session models.Session) (string, error)
 	GetUser(id, username, email string) (models.User, error)
 	GetSession(id string) (models.Session, error)
@@ -90,13 +90,20 @@ func (s *service) GetUser(id, username, email string) (models.User, error) {
 	return user, nil
 }
 
-func (s *service) CreateUser(user models.User) error {
-	_, err := s.db.Create("users", user)
+func (s *service) CreateUser(user models.User) (string, error) {
+	var users []models.User
+
+	data, err := s.db.Create("users", user)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	err = surrealdb.Unmarshal(data, &users)
+	if err != nil {
+		return "", err
+	}
+
+	return users[0].ID, nil
 }
 
 func (s *service) CreateSession(session models.Session) (string, error) {

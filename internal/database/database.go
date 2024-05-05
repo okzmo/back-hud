@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"goback/internal/models"
+	"log"
 	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -13,9 +14,11 @@ import (
 type Service interface {
 	// Health() map[string]string
 	CreateUser(user models.User) (string, error)
-	CreateSession(session models.Session) (string, error)
+	CreateSession(session models.Session) (models.Session, error)
 	GetUser(id, username, email string) (models.User, error)
 	GetSession(id string) (models.Session, error)
+	GetFriends(userId string) ([]models.User, error)
+	GetUsersFromChannel(channelId string) ([]string, error)
 }
 
 type service struct {
@@ -106,19 +109,19 @@ func (s *service) CreateUser(user models.User) (string, error) {
 	return users[0].ID, nil
 }
 
-func (s *service) CreateSession(session models.Session) (string, error) {
+func (s *service) CreateSession(session models.Session) (models.Session, error) {
 	var sess []models.Session
 	data, err := s.db.Create("sessions", session)
 	if err != nil {
-		return "", err
+		return models.Session{}, err
 	}
 
 	err = surrealdb.Unmarshal(data, &sess)
 	if err != nil {
-		return "", err
+		return models.Session{}, err
 	}
 
-	return sess[0].ID, nil
+	return sess[0], nil
 }
 
 func (s *service) GetSession(sessionId string) (models.Session, error) {
@@ -136,16 +139,42 @@ func (s *service) GetSession(sessionId string) (models.Session, error) {
 	return session, nil
 }
 
-// func (s *service) Health() map[string]string {
-// 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-// 	defer cancel()
-//
-// 	err := s.db.PingContext(ctx)
-// 	if err != nil {
-// 		log.Fatalf(fmt.Sprintf("db down: %v", err))
-// 	}
-//
-// 	return map[string]string{
-// 		"message": "It's healthy",
-// 	}
-// }
+func (s *service) GetFriends(userId string) ([]models.User, error) {
+	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar FROM <->friends<->users WHERE id != $userId)) FROM ONLY $userId;`,
+		map[string]interface{}{
+			"userId": userId,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	friends, err := surrealdb.SmartUnmarshal[[]models.User](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return friends, nil
+}
+
+type UsersId struct {
+	Users []string `json:"users"`
+}
+
+func (s *service) GetUsersFromChannel(channelId string) ([]string, error) {
+	res, err := s.db.Query("SELECT <-subscribed.in AS users FROM ONLY $channelId;", map[string]string{
+		"channelId": channelId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	users, err := surrealdb.SmartUnmarshal[UsersId](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return users.Users, nil
+}

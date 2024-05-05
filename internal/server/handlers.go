@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
@@ -27,7 +28,7 @@ func (s *Server) HelloWorldHandler(c echo.Context) error {
 type UserBodySignup struct {
 	Email       string `json:"email"`
 	Username    string `json:"username"`
-	DisplayName string `json:"displayName"`
+	DisplayName string `json:"display_name"`
 	Password    string `json:"password"`
 }
 
@@ -84,6 +85,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		Avatar:      "avatar",
 		Banner:      "banner",
 		Status:      "Online",
+		AboutMe:     "",
 	}
 
 	userId, err := s.db.CreateUser(userCreated)
@@ -101,7 +103,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		UserId:    userId,
 	}
 
-	id, err := s.db.CreateSession(sessionCreated)
+	sess, err := s.db.CreateSession(sessionCreated)
 	if err != nil {
 		log.Println("error when creating a session after creating account:", err)
 		resp["name"] = "unexpected"
@@ -110,22 +112,31 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
+	sessionExpire, error := time.Parse(time.RFC3339, sess.ExpiresdAt)
+	if error != nil {
+		log.Println("error when creating the user session", err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured on sign in."
+
+		return error
+	}
+
 	session := new(http.Cookie)
 	session.Name = "session"
 	session.Path = "/"
-	session.Value = id
-	session.Expires = time.Now().Add(24 * time.Hour * 30)
+	session.Value = sess.ID
+	session.Expires = sessionExpire
 	session.HttpOnly = true
 	session.Secure = false
 	c.SetCookie(session)
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"username":     userCreated.Username,
-		"display_name": userCreated.DisplayName,
-		"avatar":       userCreated.Avatar,
-		"banner":       userCreated.Banner,
-		"status":       userCreated.Status,
+		"username":    userCreated.Username,
+		"displayName": userCreated.DisplayName,
+		"avatar":      userCreated.Avatar,
+		"banner":      userCreated.Banner,
+		"status":      userCreated.Status,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -142,6 +153,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	body := new(UserBodySignIn)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
+		resp["name"] = "unexpected"
 		resp["message"] = "An error occured when creating your account."
 
 		return c.JSON(http.StatusBadRequest, resp)
@@ -150,6 +162,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	user, err := s.db.GetUser("", "", body.Email)
 	if err != nil {
 		log.Println(err)
+		resp["name"] = "unexpected"
 		resp["message"] = "Please check your login information and try again."
 
 		return c.JSON(http.StatusBadRequest, resp)
@@ -158,7 +171,9 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	match, err := argon2id.ComparePasswordAndHash(body.Password, user.Password)
 	if err != nil || !match {
 		log.Println(err, match)
+		resp["name"] = "unexpected"
 		resp["message"] = "Please check your login information and try again."
+		fmt.Println(resp)
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -169,30 +184,40 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 		UserId:    user.ID,
 	}
 
-	id, err := s.db.CreateSession(sessionCreated)
+	sess, err := s.db.CreateSession(sessionCreated)
 	if err != nil {
 		log.Println("error when creating the user session", err)
+		resp["name"] = "unexpected"
 		resp["message"] = "An error occured on sign in."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
+	sessionExpire, error := time.Parse(time.RFC3339, sess.ExpiresdAt)
+	if error != nil {
+		log.Println("error when creating the user session", err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured on sign in."
+
+		return error
+	}
+
 	session := new(http.Cookie)
 	session.Name = "session"
-	session.Value = id
+	session.Value = sess.ID
 	session.Path = "/"
-	session.Expires = time.Now().Add(24 * time.Hour * 30)
+	session.Expires = sessionExpire
 	session.HttpOnly = true
 	session.Secure = false
 	c.SetCookie(session)
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"username":     user.Username,
-		"display_name": user.DisplayName,
-		"avatar":       user.Avatar,
-		"banner":       user.Banner,
-		"status":       user.Status,
+		"username":    user.Username,
+		"displayName": user.DisplayName,
+		"avatar":      user.Avatar,
+		"banner":      user.Banner,
+		"status":      user.Status,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -226,12 +251,44 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"username":     user.Username,
-		"display_name": user.DisplayName,
-		"avatar":       user.Avatar,
-		"banner":       user.Banner,
-		"status":       user.Status,
+		"username":    user.Username,
+		"displayName": user.DisplayName,
+		"avatar":      user.Avatar,
+		"banner":      user.Banner,
+		"status":      user.Status,
 	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerFriends(c echo.Context) error {
+	resp := make(map[string]any)
+
+	userId := fmt.Sprintf("users:%s", c.Param("userId"))
+
+	friends, err := s.db.GetFriends(userId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["friends"] = friends
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerUsersIdFromChannel(c echo.Context) error {
+	resp := make(map[string]any)
+
+	channelId := fmt.Sprintf("channels:%s", c.Param("channelId"))
+
+	users, err := s.db.GetUsersFromChannel(channelId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["users"] = users
 
 	return c.JSON(http.StatusOK, resp)
 }

@@ -2,13 +2,14 @@ package models
 
 type User struct {
 	ID          string `json:"id,omitempty"`
-	Email       string `json:"email"`
+	Email       string `json:"email,omitempty"`
 	Password    string `json:"password,omitempty"`
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
-	Avatar      string `json:"avatar"`
-	Banner      string `json:"banner"`
-	Status      string `json:"status"`
+	Username    string `json:"username,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	Avatar      string `json:"avatar,omitempty"`
+	Banner      string `json:"banner,omitempty"`
+	Status      string `json:"status,omitempty"`
+	AboutMe     string `json:"about_me"`
 	CreatedAt   string `json:"created_at,omitempty"`
 }
 

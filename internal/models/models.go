@@ -38,3 +38,13 @@ type Channel struct {
 	Private   bool   `json:"private"`
 	CreatedAt string `json:"created_at,omitempty"`
 }
+
+type Message struct {
+	ID        string `json:"id"`
+	Author    User   `json:"author"`
+	ChannelId string `json:"channel_id"`
+	Content   string `json:"content"`
+	Edited    bool   `json:"edited"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}

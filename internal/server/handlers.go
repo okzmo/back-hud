@@ -82,7 +82,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		DisplayName: body.DisplayName,
 		Avatar:      "avatar",
 		Banner:      "banner",
-		Status:      "Online",
+		Status:      "online",
 		AboutMe:     "",
 	}
 
@@ -249,13 +249,13 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"id":          user.ID,
-		"username":    user.Username,
-		"displayName": user.DisplayName,
-		"avatar":      user.Avatar,
-		"banner":      user.Banner,
-		"status":      user.Status,
-		"about_me":    user.AboutMe,
+		"id":           user.ID,
+		"username":     user.Username,
+		"display_name": user.DisplayName,
+		"avatar":       user.Avatar,
+		"banner":       user.Banner,
+		"status":       user.Status,
+		"about_me":     user.AboutMe,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -322,6 +322,55 @@ func (s *Server) HandlerServerInformations(c echo.Context) error {
 	}
 
 	resp["server"] = server
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerMessages(c echo.Context) error {
+	resp := make(map[string]any)
+
+	serverId := fmt.Sprintf("servers:%s", c.Param("serverId"))
+
+	server, err := s.db.GetServer(serverId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["messages"] = server
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerPrivateMessages(c echo.Context) error {
+	resp := make(map[string]any)
+
+	channelId := c.Param("channelId")
+	userId := fmt.Sprintf("users:%s", c.Param("userId"))
+
+	messages, err := s.db.GetPrivateMessages(userId, channelId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["messages"] = messages
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerChannelMessages(c echo.Context) error {
+	resp := make(map[string]any)
+
+	channelId := c.Param("channelId")
+
+	messages, err := s.db.GetChannelMessages(channelId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["messages"] = messages
 
 	return c.JSON(http.StatusOK, resp)
 }

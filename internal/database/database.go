@@ -5,6 +5,7 @@ import (
 	"goback/internal/models"
 	"log"
 	"os"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
@@ -21,6 +22,8 @@ type Service interface {
 	GetUsersFromChannel(channelId string) ([]string, error)
 	GetUserServers(userId string) ([]models.Server, error)
 	GetServer(serverId string) (models.Server, error)
+	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
+	GetChannelMessages(channelId string) ([]models.Message, error)
 }
 
 type service struct {
@@ -215,4 +218,45 @@ func (s *service) GetServer(serverId string) (models.Server, error) {
 	}
 
 	return server, nil
+}
+
+func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at 
+	                        FROM messages 
+													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) FETCH author;`, map[string]string{
+		"userId":     userId,
+		"channelId":  channelId,
+		"userId2":    strings.Split(userId, ":")[1],
+		"channelId2": "users:" + channelId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	messages, err := surrealdb.SmartUnmarshal[[]models.Message](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return messages, nil
+}
+
+func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM messages WHERE channel_id=$channelId FETCH author;`, map[string]string{
+		"channelId": channelId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	messages, err := surrealdb.SmartUnmarshal[[]models.Message](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return messages, nil
 }

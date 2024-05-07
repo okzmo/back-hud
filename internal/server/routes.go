@@ -34,7 +34,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// auth.GET("/logout/:provider", s.LogoutHandler)
 
 	api := e.Group("/api/v1")
+	api.GET("/ws/:userId", s.HandlerWebsocket)
 	api.GET("/friends/:userId", s.HandlerFriends)
+	api.GET("/servers/:userId", s.HandlerUserServers)
+	api.GET("/server/:serverId", s.HandlerServerInformations)
+
 	api.GET("/channels/:channelId/users", s.HandlerUsersIdFromChannel)
 
 	return e

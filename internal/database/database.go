@@ -19,6 +19,8 @@ type Service interface {
 	GetSession(id string) (models.Session, error)
 	GetFriends(userId string) ([]models.User, error)
 	GetUsersFromChannel(channelId string) ([]string, error)
+	GetUserServers(userId string) ([]models.Server, error)
+	GetServer(serverId string) (models.Server, error)
 }
 
 type service struct {
@@ -140,7 +142,7 @@ func (s *service) GetSession(sessionId string) (models.Session, error) {
 }
 
 func (s *service) GetFriends(userId string) ([]models.User, error) {
-	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar FROM <->friends<->users WHERE id != $userId)) FROM ONLY $userId;`,
+	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar, about_me FROM <->friends<->users WHERE id != $userId)) FROM ONLY $userId;`,
 		map[string]interface{}{
 			"userId": userId,
 		})
@@ -177,4 +179,40 @@ func (s *service) GetUsersFromChannel(channelId string) ([]string, error) {
 	}
 
 	return users.Users, nil
+}
+
+func (s *service) GetUserServers(userId string) ([]models.Server, error) {
+	res, err := s.db.Query("SELECT VALUE (SELECT id, name, icon FROM ->member.out) FROM ONLY $userId;", map[string]string{
+		"userId": userId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	servers, err := surrealdb.SmartUnmarshal[[]models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return servers, nil
+}
+
+func (s *service) GetServer(serverId string) (models.Server, error) {
+	res, err := s.db.Query("SELECT * FROM ONLY $serverId FETCH channels", map[string]string{
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	}
+
+	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	}
+
+	return server, nil
 }

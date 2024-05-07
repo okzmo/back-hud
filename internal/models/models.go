@@ -21,3 +21,20 @@ type Session struct {
 	UserAgent  string `json:"user_agent"`
 	UserId     string `json:"user_id"`
 }
+
+type Server struct {
+	ID        string    `json:"id,omitempty"`
+	Name      string    `json:"name"`
+	Icon      string    `json:"icon,omitempty"`
+	Banner    string    `json:"banner,omitempty"`
+	Channels  []Channel `json:"channels,omitempty"`
+	CreatedAt string    `json:"created_at,omitempty"`
+}
+
+type Channel struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Private   bool   `json:"private"`
+	CreatedAt string `json:"created_at,omitempty"`
+}

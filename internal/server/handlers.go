@@ -5,11 +5,13 @@ import (
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/labstack/echo/v4"
+	"github.com/lxzan/gws"
 )
 
 func (s *Server) HelloWorldHandler(c echo.Context) error {
@@ -19,10 +21,6 @@ func (s *Server) HelloWorldHandler(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, resp)
 }
-
-// func (s *Server) healthHandler(c echo.Context) error {
-// 	return c.JSON(http.StatusOK, s.db.Health())
-// }
 
 // AUTH
 type UserBodySignup struct {
@@ -251,11 +249,13 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
+		"id":          user.ID,
 		"username":    user.Username,
 		"displayName": user.DisplayName,
 		"avatar":      user.Avatar,
 		"banner":      user.Banner,
 		"status":      user.Status,
+		"about_me":    user.AboutMe,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -271,6 +271,7 @@ func (s *Server) HandlerFriends(c echo.Context) error {
 		resp["message"] = err
 		return c.JSON(http.StatusNotFound, resp)
 	}
+	fmt.Println(friends)
 
 	resp["friends"] = friends
 
@@ -291,4 +292,57 @@ func (s *Server) HandlerUsersIdFromChannel(c echo.Context) error {
 	resp["users"] = users
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerUserServers(c echo.Context) error {
+	resp := make(map[string]any)
+
+	userId := fmt.Sprintf("users:%s", c.Param("userId"))
+
+	servers, err := s.db.GetUserServers(userId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["servers"] = servers
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerServerInformations(c echo.Context) error {
+	resp := make(map[string]any)
+
+	serverId := fmt.Sprintf("servers:%s", c.Param("serverId"))
+
+	server, err := s.db.GetServer(serverId)
+	if err != nil {
+		resp["message"] = err
+		return c.JSON(http.StatusNotFound, resp)
+	}
+
+	resp["server"] = server
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerWebsocket(c echo.Context) error {
+	upgrader := NewWebsocketUpgrader()
+
+	so, err := upgrader.Upgrade(c.Response(), c.Request())
+	if err != nil {
+		return err
+	}
+
+	socket := &Socket{so}
+	socket.Session().Store("userId", rand.Int63())
+
+	go func() {
+		socket.ReadLoop()
+	}()
+
+	Sub(globalEmitter, "event", socket)
+	Pub(globalEmitter, "event", gws.OpcodeText, []byte("New user connected"))
+
+	return nil
 }

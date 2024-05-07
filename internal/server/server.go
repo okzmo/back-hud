@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/lxzan/event_emitter"
 )
 
 type Server struct {
@@ -17,6 +18,11 @@ type Server struct {
 	auth auth.Service
 	db   database.Service
 }
+
+var globalEmitter = event_emitter.New[*Socket](&event_emitter.Config{
+	BucketNum:  16,
+	BucketSize: 128,
+})
 
 func NewServer() *http.Server {
 	port, err := strconv.Atoi(os.Getenv("PORT"))

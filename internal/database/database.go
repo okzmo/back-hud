@@ -24,6 +24,7 @@ type Service interface {
 	GetServer(serverId string) (models.Server, error)
 	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
 	GetChannelMessages(channelId string) ([]models.Message, error)
+	CreateMessage(message models.Message) (models.Message, error)
 }
 
 type service struct {
@@ -223,7 +224,7 @@ func (s *service) GetServer(serverId string) (models.Server, error) {
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at 
 	                        FROM messages 
-													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) FETCH author;`, map[string]string{
+													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY updated_at ASC FETCH author;`, map[string]string{
 		"userId":     userId,
 		"channelId":  channelId,
 		"userId2":    strings.Split(userId, ":")[1],
@@ -244,7 +245,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM messages WHERE channel_id=$channelId FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM messages WHERE channel_id=$channelId ORDER BY updated_at ASC FETCH author;`, map[string]string{
 		"channelId": channelId,
 	})
 	if err != nil {
@@ -259,4 +260,50 @@ func (s *service) GetChannelMessages(channelId string) ([]models.Message, error)
 	}
 
 	return messages, nil
+}
+
+type CreateMessage struct {
+	ID string `json:"id"`
+}
+
+func (s *service) CreateMessage(message models.Message) (models.Message, error) {
+	createRes, err := s.db.Query(`
+    CREATE ONLY messages CONTENT {
+      "author": $authorId,
+      "channel_id": $channelId,
+      "content": $content,
+      "edited": $edited,
+    } RETURN id;
+    `, map[string]any{
+		"authorId":  message.Author.ID,
+		"channelId": message.ChannelId,
+		"content":   message.Content,
+		"edited":    message.Edited,
+	})
+	if err != nil {
+		return models.Message{}, err
+	}
+
+	id, err := surrealdb.SmartUnmarshal[CreateMessage](createRes, err)
+	if err != nil {
+		log.Println(err)
+		return models.Message{}, err
+	}
+
+	messageRes, err := s.db.Query(`
+    SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM ONLY $id FETCH author;
+    `, map[string]any{
+		"id": id.ID,
+	})
+	if err != nil {
+		return models.Message{}, err
+	}
+
+	messageCreated, err := surrealdb.SmartUnmarshal[models.Message](messageRes, err)
+	if err != nil {
+		log.Println(err)
+		return models.Message{}, err
+	}
+
+	return messageCreated, nil
 }

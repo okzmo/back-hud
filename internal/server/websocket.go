@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lxzan/event_emitter"
@@ -12,42 +13,54 @@ const (
 	PingWait     = 30 * time.Minute
 )
 
-type Handler struct {
-	Emitter *event_emitter.EventEmitter[*Socket]
+type Websocket struct {
+	Emitter  *event_emitter.EventEmitter[*Socket]
+	sessions *gws.ConcurrentMap[string, *gws.Conn]
 }
 
-func NewHandler() *Handler {
+func NewWebsocket() *Websocket {
 	emitter := event_emitter.New[*Socket](&event_emitter.Config{
 		BucketNum:  16,
 		BucketSize: 128,
 	})
-	return &Handler{
-		Emitter: emitter,
+	return &Websocket{
+		Emitter:  emitter,
+		sessions: gws.NewConcurrentMap[string, *gws.Conn](16),
 	}
 }
 
-func NewWebsocketUpgrader() *gws.Upgrader {
-	return gws.NewUpgrader(&Handler{}, &gws.ServerOption{
+func NewWebsocketUpgrader(handler *Websocket) *gws.Upgrader {
+	return gws.NewUpgrader(handler, &gws.ServerOption{
 		ParallelEnabled:   true,
 		Recovery:          gws.Recovery,
 		PermessageDeflate: gws.PermessageDeflate{Enabled: true},
 	})
 }
 
-func (c *Handler) OnOpen(socket *gws.Conn) {
-	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
+func (c *Websocket) getMainUserId(socket *gws.Conn) string {
+	userId, _ := socket.Session().Load("userIdMain")
+	return userId.(string)
 }
 
-func (c *Handler) OnClose(socket *gws.Conn, err error) {}
+func (c *Websocket) OnOpen(socket *gws.Conn) {
+	userId := c.getMainUserId(socket)
+	if conn, ok := c.sessions.Load(userId); ok {
+		conn.WriteClose(1000, []byte("connection has been replaced"))
+	}
+	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
+	c.sessions.Store(userId, socket)
+}
 
-func (c *Handler) OnPing(socket *gws.Conn, payload []byte) {
+func (c *Websocket) OnClose(socket *gws.Conn, err error) {}
+
+func (c *Websocket) OnPing(socket *gws.Conn, payload []byte) {
 	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
 	_ = socket.WriteString("pong")
 }
 
-func (c *Handler) OnPong(socket *gws.Conn, payload []byte) {}
+func (c *Websocket) OnPong(socket *gws.Conn, payload []byte) {}
 
-func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
+func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
 	if b := message.Data.Bytes(); len(b) == 4 && string(b) == "ping" {
 		c.OnPing(socket, nil)
@@ -57,10 +70,12 @@ func (c *Handler) OnMessage(socket *gws.Conn, message *gws.Message) {
 	Pub(globalEmitter, "event", gws.OpcodeText, message.Bytes())
 }
 
+// EMITTER
 type Socket struct{ *gws.Conn }
 
 func (c *Socket) GetSubscriberID() int64 {
-	userId, _ := c.Session().Load("userId")
+	userId, _ := c.Session().Load("userIdEmitter")
+	fmt.Println(userId)
 	return userId.(int64)
 }
 

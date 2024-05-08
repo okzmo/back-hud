@@ -13,7 +13,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.Use(middleware.Recover())
 	CORSConfig := middleware.CORSConfig{
 		Skipper:          middleware.DefaultSkipper,
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
 		AllowCredentials: true,
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderSetCookie, echo.HeaderCookie, echo.HeaderContentType, echo.HeaderAccept},
@@ -38,9 +38,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.GET("/friends/:userId", s.HandlerFriends)
 	api.GET("/servers/:userId", s.HandlerUserServers)
 	api.GET("/server/:serverId", s.HandlerServerInformations)
-	// api.GET("/messages/:channelId", s)
 	api.GET("/messages/:channelId/private/:userId", s.HandlerPrivateMessages)
 	api.GET("/messages/:channelId", s.HandlerChannelMessages)
+
+	api.POST("/messages/create", s.HandlerSendMessage)
 
 	api.GET("/channels/:channelId/users", s.HandlerUsersIdFromChannel)
 

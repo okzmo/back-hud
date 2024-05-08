@@ -17,6 +17,7 @@ type Server struct {
 	port int
 	auth auth.Service
 	db   database.Service
+	ws   *Websocket
 }
 
 var globalEmitter = event_emitter.New[*Socket](&event_emitter.Config{
@@ -41,6 +42,7 @@ func NewServer() *http.Server {
 		port: port,
 		auth: auth.New(sessionStore),
 		db:   database.New(),
+		ws:   NewWebsocket(),
 	}
 
 	// Declare Server config

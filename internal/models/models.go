@@ -40,7 +40,7 @@ type Channel struct {
 }
 
 type Message struct {
-	ID        string `json:"id"`
+	ID        string `json:"id,omitempty"`
 	Author    User   `json:"author"`
 	ChannelId string `json:"channel_id"`
 	Content   string `json:"content"`

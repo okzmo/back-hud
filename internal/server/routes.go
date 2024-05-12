@@ -20,9 +20,6 @@ func (s *Server) RegisterRoutes() http.Handler {
 	}
 	e.Use(middleware.CORSWithConfig(CORSConfig))
 
-	e.GET("/", s.HelloWorldHandler)
-	// e.GET("/health", s.healthHandler)
-
 	// Auth
 	auth := e.Group("/auth")
 	auth.POST("/signup", s.HandlerSignUp)
@@ -33,17 +30,24 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// auth.GET("/:provider/callback", s.AuthCallbackHandler)
 	// auth.GET("/logout/:provider", s.LogoutHandler)
 
-	api := e.Group("/api/v1")
+	api := e.Group("/api/v1", s.SessionAuthMiddleware)
 	api.GET("/ws/:userId", s.HandlerWebsocket)
+
 	api.GET("/friends/:userId", s.HandlerFriends)
+	api.POST("/friends/add", s.HandlerAddFriend)
+	api.POST("/friends/accept", s.HandlerAcceptFriend)
+	api.POST("/friends/refuse", s.HandlerRefuseFriend)
+
 	api.GET("/servers/:userId", s.HandlerUserServers)
 	api.GET("/server/:serverId", s.HandlerServerInformations)
+
 	api.GET("/messages/:channelId/private/:userId", s.HandlerPrivateMessages)
 	api.GET("/messages/:channelId", s.HandlerChannelMessages)
-
 	api.POST("/messages/create", s.HandlerSendMessage)
 
 	api.GET("/channels/:channelId/users", s.HandlerUsersIdFromChannel)
+
+	api.GET("/notifications/:userId", s.HandlerNotifications)
 
 	return e
 }

@@ -48,3 +48,8 @@ type Message struct {
 	UpdatedAt string `json:"updated_at,omitempty"`
 	CreatedAt string `json:"created_at,omitempty"`
 }
+
+type WSMessage struct {
+	Type    string `json:"type"`
+	Content any    `json:"content"`
+}

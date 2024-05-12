@@ -25,6 +25,10 @@ type Service interface {
 	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
 	GetChannelMessages(channelId string) ([]models.Message, error)
 	CreateMessage(message models.Message) (models.Message, error)
+	RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error)
+	AcceptFriend(requestId, notifId string) ([]models.User, error)
+	RefuseFriend(requestId, notifId string) error
+	GetNotifications(userId string) (interface{}, error)
 }
 
 type service struct {
@@ -146,7 +150,7 @@ func (s *service) GetSession(sessionId string) (models.Session, error) {
 }
 
 func (s *service) GetFriends(userId string) ([]models.User, error) {
-	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar, about_me FROM <->friends<->users WHERE id != $userId)) FROM ONLY $userId;`,
+	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar, about_me FROM <->(friends WHERE accepted=true)<->users WHERE id != $userId)) FROM ONLY $userId;`,
 		map[string]interface{}{
 			"userId": userId,
 		})
@@ -306,4 +310,141 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	return messageCreated, nil
+}
+
+type FriendStruct struct {
+	Accepted bool   `json:"accepted"`
+	Id       string `json:"id"`
+	In       string `json:"in"`
+	Out      string `json:"out"`
+}
+
+func (s *service) RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error) {
+	existing, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $friendId = SELECT VALUE id FROM users WHERE username=$receiverUsername;
+      LET $existingRequest = SELECT VALUE (SELECT id, accepted FROM <->friends WHERE out=$friendId[0] OR in=$friendId[0]) FROM ONLY $initiatorId;
+
+      IF COUNT($existingRequest) == 0 {
+          THROW "No existing request"
+      };
+
+      RETURN $existingRequest[0];
+      COMMIT TRANSACTION;
+    `, map[string]string{
+		"initiatorId":       initiatorId,
+		"initiatorUsername": initiatorUsername,
+		"receiverUsername":  receiverUsername,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.FriendRequest{}, err
+	}
+
+	friend, err := surrealdb.SmartUnmarshal[FriendStruct](existing, err)
+	if err == nil {
+		if friend.Accepted {
+			return models.FriendRequest{}, fmt.Errorf("you're already friend with this person")
+		} else if !friend.Accepted {
+			return models.FriendRequest{}, fmt.Errorf("a friend request is already pending")
+		}
+	}
+
+	relateFriends, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $friend = SELECT id FROM users WHERE username=$receiverUsername;
+      LET $request = RELATE ONLY $initiatorId->friends->$friend;
+
+      LET $notif = CREATE ONLY notifications CONTENT {
+          "type": "friend_request",
+          "user_id": $friend[0].id,
+          "initiator_id": $initiatorId,
+          "request_id": $request.id,
+          "message": $initiatorUsername + " sent you a friend request.",
+          "created_at": time::now()
+      };
+
+      RETURN $notif;
+      COMMIT TRANSACTION;
+    `, map[string]string{
+		"initiatorId":       initiatorId,
+		"initiatorUsername": initiatorUsername,
+		"receiverUsername":  receiverUsername,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.FriendRequest{}, fmt.Errorf("an error occured when adding your friend")
+	}
+
+	notif, err := surrealdb.SmartUnmarshal[models.FriendRequest](relateFriends, err)
+	if err != nil {
+		log.Println(err)
+		return models.FriendRequest{}, err
+	}
+
+	return notif, nil
+}
+
+func (s *service) AcceptFriend(requestId, notifId string) ([]models.User, error) {
+	res, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $users = SELECT initiator_id, user_id FROM ONLY $notifId;
+      LET $initiator = SELECT id, username, display_name, status, avatar, about_me FROM ONLY $users.initiator_id;  
+      LET $receiver = SELECT id, username, display_name, status, avatar, about_me FROM ONLY $users.user_id;
+
+      UPDATE $requestId SET accepted=true;
+      DELETE $notifId;
+
+      RETURN [$initiator, $receiver];
+      COMMIT TRANSACTION;
+    `, map[string]string{
+		"requestId": requestId,
+		"notifId":   notifId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	users, err := surrealdb.SmartUnmarshal[[]models.User](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func (s *service) RefuseFriend(requestId, notifId string) error {
+	_, err := s.db.Query(`
+    DELETE $requestId;
+    DELETE $notifId;
+    `, map[string]string{
+		"requestId": requestId,
+		"notifId":   notifId,
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) GetNotifications(userId string) (interface{}, error) {
+	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId ORDER BY created_at DESC", map[string]string{
+		"userId": userId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	notifs, err := surrealdb.SmartUnmarshal[interface{}](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.FriendRequest{}, err
+	}
+
+	return notifs, err
 }

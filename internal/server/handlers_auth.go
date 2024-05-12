@@ -1,28 +1,16 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
-	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/labstack/echo/v4"
-	"github.com/lxzan/gws"
 )
-
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	resp := map[string]string{
-		"message": "Hello World",
-	}
-
-	return c.JSON(http.StatusOK, resp)
-}
 
 // AUTH
 type UserBodySignup struct {
@@ -230,7 +218,7 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 	if err != nil {
 		resp["message"] = "No session cookie available."
 
-		return c.JSON(http.StatusNotFound, resp)
+		return c.JSON(http.StatusUnauthorized, resp)
 	}
 
 	session, err := s.db.GetSession(sessionCookie.Value)
@@ -238,7 +226,7 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 		log.Println(err)
 		resp["message"] = "No session related to given id."
 
-		return c.JSON(http.StatusNotFound, resp)
+		return c.JSON(http.StatusUnauthorized, resp)
 	}
 
 	user, err := s.db.GetUser(session.UserId, "", "")
@@ -246,7 +234,7 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 		log.Println(err)
 		resp["message"] = "No user match the given id from session."
 
-		return c.JSON(http.StatusNotFound, resp)
+		return c.JSON(http.StatusUnauthorized, resp)
 	}
 
 	resp["message"] = "success"
@@ -261,195 +249,4 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerFriends(c echo.Context) error {
-	resp := make(map[string]any)
-
-	userId := fmt.Sprintf("users:%s", c.Param("userId"))
-
-	friends, err := s.db.GetFriends(userId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-	fmt.Println(friends)
-
-	resp["friends"] = friends
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerUsersIdFromChannel(c echo.Context) error {
-	resp := make(map[string]any)
-
-	channelId := fmt.Sprintf("channels:%s", c.Param("channelId"))
-
-	users, err := s.db.GetUsersFromChannel(channelId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["users"] = users
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerUserServers(c echo.Context) error {
-	resp := make(map[string]any)
-
-	userId := fmt.Sprintf("users:%s", c.Param("userId"))
-
-	servers, err := s.db.GetUserServers(userId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["servers"] = servers
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerServerInformations(c echo.Context) error {
-	resp := make(map[string]any)
-
-	serverId := fmt.Sprintf("servers:%s", c.Param("serverId"))
-
-	server, err := s.db.GetServer(serverId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["server"] = server
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerMessages(c echo.Context) error {
-	resp := make(map[string]any)
-
-	serverId := fmt.Sprintf("servers:%s", c.Param("serverId"))
-
-	server, err := s.db.GetServer(serverId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["messages"] = server
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerPrivateMessages(c echo.Context) error {
-	resp := make(map[string]any)
-
-	channelId := c.Param("channelId")
-	userId := fmt.Sprintf("users:%s", c.Param("userId"))
-
-	messages, err := s.db.GetPrivateMessages(userId, channelId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["messages"] = messages
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerChannelMessages(c echo.Context) error {
-	resp := make(map[string]any)
-
-	channelId := c.Param("channelId")
-
-	messages, err := s.db.GetChannelMessages(channelId)
-	if err != nil {
-		resp["message"] = err
-		return c.JSON(http.StatusNotFound, resp)
-	}
-
-	resp["messages"] = messages
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-type CreateMessage struct {
-	Author         models.User `json:"author"`
-	ChannelId      string      `json:"channel_id"`
-	Content        string      `json:"content"`
-	PrivateMessage bool        `json:"private_message"`
-}
-
-func (s *Server) HandlerSendMessage(c echo.Context) error {
-	resp := make(map[string]any)
-
-	body := new(CreateMessage)
-	if err := c.Bind(body); err != nil {
-		log.Println(err)
-		resp["message"] = "An error occured when sending your message."
-
-		return c.JSON(http.StatusBadRequest, resp)
-	}
-
-	message := models.Message{
-		Author:    body.Author,
-		ChannelId: body.ChannelId,
-		Content:   body.Content,
-		Edited:    false,
-	}
-
-	mess, err := s.db.CreateMessage(message)
-	if err != nil {
-		log.Println("error when creating a message", err)
-		resp["message"] = "An error occured when sending your message."
-
-		return c.JSON(http.StatusBadRequest, resp)
-	}
-
-	if body.PrivateMessage {
-		data, err := json.Marshal(mess)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
-
-		if conn, ok := s.ws.sessions.Load(strings.Split(body.Author.ID, ":")[1]); ok {
-			conn.WriteMessage(gws.OpcodeText, data)
-		}
-
-		connFriend, ok := s.ws.sessions.Load(body.ChannelId)
-		fmt.Println(body.ChannelId)
-		if ok {
-			connFriend.WriteMessage(gws.OpcodeText, data)
-		}
-	}
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) HandlerWebsocket(c echo.Context) error {
-	upgrader := NewWebsocketUpgrader(s.ws)
-
-	so, err := upgrader.Upgrade(c.Response(), c.Request())
-	if err != nil {
-		return err
-	}
-
-	socket := &Socket{so}
-	userIdMain := c.Param("userId")
-	socket.Session().Store("userIdMain", userIdMain)
-	socket.Session().Store("userIdEmitter", rand.Int63())
-
-	go func() {
-		socket.ReadLoop()
-	}()
-
-	Sub(globalEmitter, "event", socket)
-	Pub(globalEmitter, "event", gws.OpcodeText, []byte("New user connected"))
-
-	return nil
 }

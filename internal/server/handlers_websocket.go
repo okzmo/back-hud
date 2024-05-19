@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
 
 	"github.com/labstack/echo/v4"
@@ -24,7 +26,15 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 		socket.ReadLoop()
 	}()
 
-	// Sub(globalEmitter, "event", socket)
+	channels, err := s.db.GetSubscribedChannels(userIdMain)
+	if err != nil {
+		log.Println(err)
+	}
+
+	for _, channel := range channels {
+		fmt.Println(channel.ID)
+		Sub(globalEmitter, channel.ID, socket)
+	}
 	// Pub(globalEmitter, "event", gws.OpcodeText, []byte("New user connected"))
 
 	return nil

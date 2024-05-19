@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lxzan/event_emitter"
@@ -66,8 +65,6 @@ func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 		c.OnPing(socket, nil)
 		return
 	}
-
-	Pub(globalEmitter, "event", gws.OpcodeText, message.Bytes())
 }
 
 // EMITTER
@@ -75,7 +72,6 @@ type Socket struct{ *gws.Conn }
 
 func (c *Socket) GetSubscriberID() int64 {
 	userId, _ := c.Session().Load("userIdEmitter")
-	fmt.Println(userId)
 	return userId.(int64)
 }
 

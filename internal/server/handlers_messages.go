@@ -82,13 +82,13 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		Type:    "text_message",
 		Content: mess,
 	}
+	data, err := json.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
 
 	if body.PrivateMessage {
-		data, err := json.Marshal(wsMess)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
 
 		if conn, ok := s.ws.sessions.Load(strings.Split(body.Author.ID, ":")[1]); ok {
 			conn.WriteMessage(gws.OpcodeText, data)
@@ -99,6 +99,8 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		if ok {
 			connFriend.WriteMessage(gws.OpcodeText, data)
 		}
+	} else {
+		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeText, data)
 	}
 
 	return c.JSON(http.StatusOK, resp)

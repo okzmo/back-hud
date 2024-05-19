@@ -53,6 +53,7 @@ func (s *Server) HandlerAddFriend(c echo.Context) error {
 	notif, err := s.db.RelateFriends(body.InitiatorId, body.InitiatorUsername, body.ReceiverUsername)
 	if err != nil {
 		log.Println("error when relating users:", err)
+		resp["name"] = "unexpected"
 		resp["message"] = err.Error()
 
 		return c.JSON(http.StatusBadRequest, resp)

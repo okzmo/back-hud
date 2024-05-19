@@ -29,6 +29,9 @@ type Service interface {
 	AcceptFriend(requestId, notifId string) ([]models.User, error)
 	RefuseFriend(requestId, notifId string) error
 	GetNotifications(userId string) (interface{}, error)
+	JoinServer(userId, serverId string) (models.Server, error)
+	GetSubscribedChannels(userId string) ([]models.Channel, error)
+	CreateServer(userId, name string) (models.Server, error)
 }
 
 type service struct {
@@ -226,9 +229,9 @@ func (s *service) GetServer(serverId string) (models.Server, error) {
 }
 
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at 
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at
 	                        FROM messages 
-													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY updated_at ASC FETCH author;`, map[string]string{
+													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"userId":     userId,
 		"channelId":  channelId,
 		"userId2":    strings.Split(userId, ":")[1],
@@ -249,7 +252,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM messages WHERE channel_id=$channelId ORDER BY updated_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": channelId,
 	})
 	if err != nil {
@@ -447,4 +450,138 @@ func (s *service) GetNotifications(userId string) (interface{}, error) {
 	}
 
 	return notifs, err
+}
+
+func (s *service) GetSubscribedChannels(userId string) ([]models.Channel, error) {
+	res, err := s.db.Query("SELECT VALUE (SELECT id FROM ->subscribed.out) FROM ONLY $userId;", map[string]string{
+		"userId": "users:" + userId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	channels, err := surrealdb.SmartUnmarshal[[]models.Channel](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return channels, err
+}
+
+func (s *service) JoinServer(userId, inviteId string) (models.Server, error) {
+	res, err := s.db.Query(`SELECT VALUE server_id FROM invites WHERE invite_id=$inviteId;`, map[string]string{
+		"inviteId": inviteId,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	}
+
+	serverId, err := surrealdb.SmartUnmarshal[[]string](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	} else if len(serverId) == 0 {
+		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+	}
+
+	existing, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $existingUser = (SELECT VALUE (SELECT id FROM <-member.in WHERE id = $userId) FROM ONLY $serverId);
+      RETURN $existingUser[0].id;
+      COMMIT TRANSACTION;
+    `, map[string]interface{}{
+		"serverId": serverId[0],
+		"userId":   "users:" + userId,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+	}
+
+	existing, err = surrealdb.SmartUnmarshal[string](existing, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	} else if existing != "" {
+		return models.Server{}, fmt.Errorf("you already joined this community")
+	}
+
+	res, err = s.db.Query(`
+	     BEGIN TRANSACTION;
+	     LET $server = (SELECT id, icon, name FROM ONLY $serverId);
+       LET $serverChannels = (SELECT VALUE channels FROM ONLY $serverId);
+	     RELATE $userId->member->$serverId;
+       RELATE $userId->subscribed->$serverChannels;
+	     RETURN $server;
+	     COMMIT TRANSACTION;
+	   `, map[string]string{
+		"userId":   "users:" + userId,
+		"serverId": serverId[0],
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+	}
+	fmt.Println(res)
+
+	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+	}
+
+	return server, nil
+}
+
+func (s *service) CreateServer(userId, name string) (models.Server, error) {
+	res, err := s.db.Query(`
+        BEGIN TRANSACTION;
+        LET $textChannel = (CREATE ONLY channels CONTENT {
+          name: "Textual channel",
+          type: "textual",
+          private: false,
+        } RETURN id);
+
+        LET $voiceChannel = (CREATE ONLY channels CONTENT {
+          name: "Voice channel",
+          type: "voice",
+          private: false,
+        } RETURN id);
+
+        LET $server = (CREATE ONLY servers CONTENT {
+            banner: "",
+            icon: "",
+            channels: [$textChannel.id, $voiceChannel.id],
+            name: $name,
+        } RETURN AFTER);
+
+        RELATE $userId->member->$server SET roles = ["owner"];
+        RELATE $userId->subscribed->[$textChannel.id, $voiceChannel.id];
+
+        RETURN { 
+            id: $server.id, 
+            name: $server.name,
+            icon: $server.icon
+        };
+        COMMIT TRANSACTION;
+	   `, map[string]string{
+		"userId": userId,
+		"name":   name,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, fmt.Errorf("the creation could not be completed, please retry later")
+	}
+	fmt.Println(res)
+
+	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, fmt.Errorf("the creation could not be completed, please retry later")
+	}
+
+	return server, nil
 }

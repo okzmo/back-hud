@@ -40,6 +40,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	api.GET("/servers/:userId", s.HandlerUserServers)
 	api.GET("/server/:serverId", s.HandlerServerInformations)
+	api.POST("/server/join", s.HandlerJoinServer)
+	api.POST("/server/create", s.HandlerCreateServer)
 
 	api.GET("/messages/:channelId/private/:userId", s.HandlerPrivateMessages)
 	api.GET("/messages/:channelId", s.HandlerChannelMessages)

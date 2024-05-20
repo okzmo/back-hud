@@ -28,6 +28,7 @@ type Server struct {
 	Icon      string    `json:"icon,omitempty"`
 	Banner    string    `json:"banner,omitempty"`
 	Channels  []Channel `json:"channels,omitempty"`
+	Roles     []string  `json:"roles,omitempty"`
 	CreatedAt string    `json:"created_at,omitempty"`
 }
 

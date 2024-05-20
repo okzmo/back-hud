@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -80,14 +81,19 @@ func (s *Server) HandlerJoinServer(c echo.Context) error {
 	}
 
 	server, err := s.db.JoinServer(body.UserId, body.InviteId)
-	fmt.Println(server, err)
 	if err != nil {
 		resp["name"] = "unexpected"
 		resp["message"] = err.Error()
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	resp["server"] = server
+	if conn, ok := s.ws.sessions.Load(strings.Split(body.UserId, ":")[1]); ok {
+		for _, channel := range server.ServerChannels {
+			Sub(globalEmitter, channel, &Socket{conn})
+		}
+	}
+
+	resp["server"] = server.Server
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -105,14 +111,19 @@ func (s *Server) HandlerCreateServer(c echo.Context) error {
 	}
 
 	server, err := s.db.CreateServer(body.UserId, body.Name)
-	fmt.Println(server, err)
 	if err != nil {
 		resp["name"] = "unexpected"
 		resp["message"] = err.Error()
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	resp["server"] = server
+	if conn, ok := s.ws.sessions.Load(strings.Split(body.UserId, ":")[1]); ok {
+		for _, channel := range server.ServerChannels {
+			Sub(globalEmitter, channel, &Socket{conn})
+		}
+	}
+
+	resp["server"] = server.Server
 
 	return c.JSON(http.StatusOK, resp)
 }

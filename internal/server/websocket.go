@@ -71,12 +71,12 @@ func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 type Socket struct{ *gws.Conn }
 
 func (c *Socket) GetSubscriberID() int64 {
-	userId, _ := c.Session().Load("userIdEmitter")
+	userId, _ := c.Conn.Session().Load("userIdEmitter")
 	return userId.(int64)
 }
 
 func (c *Socket) GetMetadata() event_emitter.Metadata {
-	return c.Session()
+	return c.Conn.Session()
 }
 
 func Sub(em *event_emitter.EventEmitter[*Socket], topic string, socket *Socket) {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 
@@ -19,8 +18,8 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 
 	socket := &Socket{so}
 	userIdMain := c.Param("userId")
-	socket.Session().Store("userIdMain", userIdMain)
-	socket.Session().Store("userIdEmitter", rand.Int63())
+	socket.Conn.Session().Store("userIdMain", userIdMain)
+	socket.Conn.Session().Store("userIdEmitter", rand.Int63())
 
 	go func() {
 		socket.ReadLoop()
@@ -32,7 +31,6 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 	}
 
 	for _, channel := range channels {
-		fmt.Println(channel.ID)
 		Sub(globalEmitter, channel.ID, socket)
 	}
 	// Pub(globalEmitter, "event", gws.OpcodeText, []byte("New user connected"))

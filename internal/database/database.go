@@ -29,9 +29,9 @@ type Service interface {
 	AcceptFriend(requestId, notifId string) ([]models.User, error)
 	RefuseFriend(requestId, notifId string) error
 	GetNotifications(userId string) (interface{}, error)
-	JoinServer(userId, serverId string) (models.Server, error)
+	JoinServer(userId, serverId string) (jcServerReturn, error)
 	GetSubscribedChannels(userId string) ([]models.Channel, error)
-	CreateServer(userId, name string) (models.Server, error)
+	CreateServer(userId, name string) (jcServerReturn, error)
 }
 
 type service struct {
@@ -193,7 +193,15 @@ func (s *service) GetUsersFromChannel(channelId string) ([]string, error) {
 }
 
 func (s *service) GetUserServers(userId string) ([]models.Server, error) {
-	res, err := s.db.Query("SELECT VALUE (SELECT id, name, icon FROM ->member.out) FROM ONLY $userId;", map[string]string{
+	res, err := s.db.Query(`
+      SELECT
+        roles,
+        out.id AS id,
+        out.name AS name,
+        out.icon AS icon,
+        out.created_at AS created_at
+      FROM member WHERE in = $userId FETCH out;
+    `, map[string]string{
 		"userId": userId,
 	})
 	if err != nil {
@@ -229,9 +237,11 @@ func (s *service) GetServer(serverId string) (models.Server, error) {
 }
 
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at
-	                        FROM messages 
-													WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`
+      SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at
+      FROM messages 
+      WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
+    `, map[string]string{
 		"userId":     userId,
 		"channelId":  channelId,
 		"userId2":    strings.Split(userId, ":")[1],
@@ -470,21 +480,26 @@ func (s *service) GetSubscribedChannels(userId string) ([]models.Channel, error)
 	return channels, err
 }
 
-func (s *service) JoinServer(userId, inviteId string) (models.Server, error) {
+type jcServerReturn struct {
+	Server         models.Server `json:"server"`
+	ServerChannels []string      `json:"server_channels"`
+}
+
+func (s *service) JoinServer(userId, inviteId string) (jcServerReturn, error) {
 	res, err := s.db.Query(`SELECT VALUE server_id FROM invites WHERE invite_id=$inviteId;`, map[string]string{
 		"inviteId": inviteId,
 	})
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, err
+		return jcServerReturn{}, err
 	}
 
 	serverId, err := surrealdb.SmartUnmarshal[[]string](res, err)
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, err
+		return jcServerReturn{}, err
 	} else if len(serverId) == 0 {
-		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
 	}
 
 	existing, err := s.db.Query(`
@@ -494,19 +509,19 @@ func (s *service) JoinServer(userId, inviteId string) (models.Server, error) {
       COMMIT TRANSACTION;
     `, map[string]interface{}{
 		"serverId": serverId[0],
-		"userId":   "users:" + userId,
+		"userId":   userId,
 	})
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
 	}
 
 	existing, err = surrealdb.SmartUnmarshal[string](existing, err)
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, err
+		return jcServerReturn{}, err
 	} else if existing != "" {
-		return models.Server{}, fmt.Errorf("you already joined this community")
+		return jcServerReturn{}, fmt.Errorf("you already joined this community")
 	}
 
 	res, err = s.db.Query(`
@@ -515,28 +530,30 @@ func (s *service) JoinServer(userId, inviteId string) (models.Server, error) {
        LET $serverChannels = (SELECT VALUE channels FROM ONLY $serverId);
 	     RELATE $userId->member->$serverId;
        RELATE $userId->subscribed->$serverChannels;
-	     RETURN $server;
+	     RETURN {
+         server: $server,
+         server_channels: $serverChannels
+       };
 	     COMMIT TRANSACTION;
 	   `, map[string]string{
-		"userId":   "users:" + userId,
+		"userId":   userId,
 		"serverId": serverId[0],
 	})
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
 	}
-	fmt.Println(res)
 
-	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	server, err := surrealdb.SmartUnmarshal[jcServerReturn](res, err)
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, fmt.Errorf("the invitation is either invalid or has expired")
+		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
 	}
 
 	return server, nil
 }
 
-func (s *service) CreateServer(userId, name string) (models.Server, error) {
+func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
 	res, err := s.db.Query(`
         BEGIN TRANSACTION;
         LET $textChannel = (CREATE ONLY channels CONTENT {
@@ -562,9 +579,12 @@ func (s *service) CreateServer(userId, name string) (models.Server, error) {
         RELATE $userId->subscribed->[$textChannel.id, $voiceChannel.id];
 
         RETURN { 
-            id: $server.id, 
-            name: $server.name,
-            icon: $server.icon
+            server: {
+              id: $server.id, 
+              name: $server.name,
+              icon: $server.icon,
+            },
+            server_channels: $server.channels
         };
         COMMIT TRANSACTION;
 	   `, map[string]string{
@@ -573,14 +593,13 @@ func (s *service) CreateServer(userId, name string) (models.Server, error) {
 	})
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, fmt.Errorf("the creation could not be completed, please retry later")
+		return jcServerReturn{}, fmt.Errorf("the creation could not be completed, please retry later")
 	}
-	fmt.Println(res)
 
-	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	server, err := surrealdb.SmartUnmarshal[jcServerReturn](res, err)
 	if err != nil {
 		log.Println(err)
-		return models.Server{}, fmt.Errorf("the creation could not be completed, please retry later")
+		return jcServerReturn{}, fmt.Errorf("the creation could not be completed, please retry later")
 	}
 
 	return server, nil

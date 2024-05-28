@@ -95,7 +95,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		}
 
 		connFriend, ok := s.ws.sessions.Load(body.ChannelId)
-		fmt.Println(body.ChannelId)
 		if ok {
 			connFriend.WriteMessage(gws.OpcodeText, data)
 		}

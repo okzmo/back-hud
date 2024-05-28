@@ -37,17 +37,25 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/friends/add", s.HandlerAddFriend)
 	api.POST("/friends/accept", s.HandlerAcceptFriend)
 	api.POST("/friends/refuse", s.HandlerRefuseFriend)
+	api.POST("/friends/delete", s.HandlerRemoveFriend)
 
 	api.GET("/servers/:userId", s.HandlerUserServers)
-	api.GET("/server/:serverId", s.HandlerServerInformations)
+	api.GET("/server/:userId/:serverId", s.HandlerServerInformations)
 	api.POST("/server/join", s.HandlerJoinServer)
 	api.POST("/server/create", s.HandlerCreateServer)
+	api.POST("/server/delete", s.HandlerDeleteServer)
+	api.POST("/server/leave", s.HandlerLeaveServer)
 
 	api.GET("/messages/:channelId/private/:userId", s.HandlerPrivateMessages)
 	api.GET("/messages/:channelId", s.HandlerChannelMessages)
 	api.POST("/messages/create", s.HandlerSendMessage)
 
 	api.GET("/channels/:channelId/users", s.HandlerUsersIdFromChannel)
+	api.POST("/channels/create", s.HandlerCreateChannel)
+	api.POST("/channels/delete", s.HandlerDeleteChannel)
+
+	api.POST("/category/create", s.HandlerCreateCategory)
+	api.POST("/category/delete", s.HandlerDeleteCategory)
 
 	api.GET("/notifications/:userId", s.HandlerNotifications)
 

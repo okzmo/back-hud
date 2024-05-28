@@ -23,13 +23,18 @@ type Session struct {
 }
 
 type Server struct {
-	ID        string    `json:"id,omitempty"`
-	Name      string    `json:"name"`
-	Icon      string    `json:"icon,omitempty"`
-	Banner    string    `json:"banner,omitempty"`
-	Channels  []Channel `json:"channels,omitempty"`
-	Roles     []string  `json:"roles,omitempty"`
-	CreatedAt string    `json:"created_at,omitempty"`
+	ID         string     `json:"id,omitempty"`
+	Name       string     `json:"name"`
+	Icon       string     `json:"icon,omitempty"`
+	Banner     string     `json:"banner,omitempty"`
+	Categories []Category `json:"categories,omitempty"`
+	Roles      []string   `json:"roles,omitempty"`
+	CreatedAt  string     `json:"created_at,omitempty"`
+}
+
+type Category struct {
+	Name     string    `json:"name"`
+	Channels []Channel `json:"channels"`
 }
 
 type Channel struct {

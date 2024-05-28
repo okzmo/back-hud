@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 
@@ -25,15 +26,22 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 		socket.ReadLoop()
 	}()
 
+	servers, err := s.db.GetUserServers("users:" + userIdMain)
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(servers)
 	channels, err := s.db.GetSubscribedChannels(userIdMain)
 	if err != nil {
 		log.Println(err)
 	}
 
+	for _, server := range servers {
+		Sub(globalEmitter, server.ID, socket)
+	}
 	for _, channel := range channels {
 		Sub(globalEmitter, channel.ID, socket)
 	}
-	// Pub(globalEmitter, "event", gws.OpcodeText, []byte("New user connected"))
 
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"goback/internal/models"
 	"log"
 	"os"
+	"slices"
 	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -21,17 +22,24 @@ type Service interface {
 	GetFriends(userId string) ([]models.User, error)
 	GetUsersFromChannel(channelId string) ([]string, error)
 	GetUserServers(userId string) ([]models.Server, error)
-	GetServer(serverId string) (models.Server, error)
+	GetServer(userId, serverId string) (models.Server, error)
 	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
 	GetChannelMessages(channelId string) ([]models.Message, error)
 	CreateMessage(message models.Message) (models.Message, error)
 	RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error)
 	AcceptFriend(requestId, notifId string) ([]models.User, error)
 	RefuseFriend(requestId, notifId string) error
+	RemoveFriend(userId, FriendId string) error
 	GetNotifications(userId string) (interface{}, error)
 	JoinServer(userId, serverId string) (jcServerReturn, error)
 	GetSubscribedChannels(userId string) ([]models.Channel, error)
 	CreateServer(userId, name string) (jcServerReturn, error)
+	DeleteServer(userId, serverId string) error
+	LeaveServer(userId, serverId string) error
+	CreateChannel(serverId, categoryName, channelType, name string) (createChannelReturn, error)
+	RemoveChannel(serverId, categoryName, channelId string) error
+	CreateCategory(serverId, name string) error
+	RemoveCategory(serverId, name string) error
 }
 
 type service struct {
@@ -200,7 +208,7 @@ func (s *service) GetUserServers(userId string) ([]models.Server, error) {
         out.name AS name,
         out.icon AS icon,
         out.created_at AS created_at
-      FROM member WHERE in = $userId FETCH out;
+      FROM member WHERE in = $userId ORDER BY created_at ASC FETCH out;
     `, map[string]string{
 		"userId": userId,
 	})
@@ -218,8 +226,8 @@ func (s *service) GetUserServers(userId string) ([]models.Server, error) {
 	return servers, nil
 }
 
-func (s *service) GetServer(serverId string) (models.Server, error) {
-	res, err := s.db.Query("SELECT * FROM ONLY $serverId FETCH channels", map[string]string{
+func (s *service) GetServer(userId, serverId string) (models.Server, error) {
+	res, err := s.db.Query("SELECT * FROM ONLY $serverId FETCH categories.channels", map[string]string{
 		"serverId": serverId,
 	})
 	if err != nil {
@@ -233,6 +241,23 @@ func (s *service) GetServer(serverId string) (models.Server, error) {
 		return models.Server{}, err
 	}
 
+	res, err = s.db.Query("SELECT VALUE roles FROM ONLY member WHERE in = $userId AND out = $serverId LIMIT 1;", map[string]string{
+		"userId":   userId,
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	}
+
+	roles, err := surrealdb.SmartUnmarshal[[]string](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Server{}, err
+	}
+
+	server.Roles = roles
+
 	return server, nil
 }
 
@@ -243,7 +268,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
       WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
     `, map[string]string{
 		"userId":     userId,
-		"channelId":  channelId,
+		"channelId":  "channels:" + channelId,
 		"userId2":    strings.Split(userId, ":")[1],
 		"channelId2": "users:" + channelId,
 	})
@@ -263,7 +288,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
-		"channelId": channelId,
+		"channelId": "channels:" + channelId,
 	})
 	if err != nil {
 		log.Println(err)
@@ -293,7 +318,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
     } RETURN id;
     `, map[string]any{
 		"authorId":  message.Author.ID,
-		"channelId": message.ChannelId,
+		"channelId": "channels:" + message.ChannelId,
 		"content":   message.Content,
 		"edited":    message.Edited,
 	})
@@ -444,6 +469,21 @@ func (s *service) RefuseFriend(requestId, notifId string) error {
 	return nil
 }
 
+func (s *service) RemoveFriend(userId, friendId string) error {
+	_, err := s.db.Query(`
+      DELETE friends WHERE (in=$userId AND out=$friendId) OR (in=$friendId AND out=$userId);
+    `, map[string]string{
+		"userId":   userId,
+		"friendId": friendId,
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
 func (s *service) GetNotifications(userId string) (interface{}, error) {
 	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId ORDER BY created_at DESC", map[string]string{
 		"userId": userId,
@@ -527,7 +567,7 @@ func (s *service) JoinServer(userId, inviteId string) (jcServerReturn, error) {
 	res, err = s.db.Query(`
 	     BEGIN TRANSACTION;
 	     LET $server = (SELECT id, icon, name FROM ONLY $serverId);
-       LET $serverChannels = (SELECT VALUE channels FROM ONLY $serverId);
+       LET $serverChannels = (SELECT VALUE array::flatten(categories.channels) FROM ONLY $serverId);
 	     RELATE $userId->member->$serverId;
        RELATE $userId->subscribed->$serverChannels;
 	     RETURN {
@@ -539,6 +579,7 @@ func (s *service) JoinServer(userId, inviteId string) (jcServerReturn, error) {
 		"userId":   userId,
 		"serverId": serverId[0],
 	})
+	fmt.Println(res)
 	if err != nil {
 		log.Println(err)
 		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
@@ -571,7 +612,15 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
         LET $server = (CREATE ONLY servers CONTENT {
             banner: "",
             icon: "",
-            channels: [$textChannel.id, $voiceChannel.id],
+            categories: [
+                {
+                  channels: [
+                    $textChannel.id,
+                    $voiceChannel.id
+                  ],
+                  name: 'General'
+                }
+            ],
             name: $name,
         } RETURN AFTER);
 
@@ -584,7 +633,7 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
               name: $server.name,
               icon: $server.icon,
             },
-            server_channels: $server.channels
+            server_channels: array::flatten($server.categories.channels)
         };
         COMMIT TRANSACTION;
 	   `, map[string]string{
@@ -595,6 +644,7 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
 		log.Println(err)
 		return jcServerReturn{}, fmt.Errorf("the creation could not be completed, please retry later")
 	}
+	fmt.Println(res)
 
 	server, err := surrealdb.SmartUnmarshal[jcServerReturn](res, err)
 	if err != nil {
@@ -603,4 +653,158 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
 	}
 
 	return server, nil
+}
+
+func (s *service) DeleteServer(userId, serverId string) error {
+	res, err := s.db.Query(`SELECT VALUE roles FROM ONLY member WHERE in = $userId AND out = $serverId LIMIT 1;`, map[string]string{
+		"serverId": serverId,
+		"userId":   userId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while deleting the server")
+	}
+
+	roles, err := surrealdb.SmartUnmarshal[[]string](res, err)
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while deleting the server")
+	} else if !slices.Contains(roles, "owner") {
+		return fmt.Errorf("an error occured while deleting the server")
+	}
+
+	_, err = s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $serverChannels = (SELECT VALUE array::flatten(categories.channels) FROM ONLY $serverId);
+      DELETE $serverId;
+      DELETE $serverChannels;
+      DELETE messages WHERE channel_id IN $serverChannels;
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while deleting the server")
+	}
+
+	return nil
+}
+
+func (s *service) LeaveServer(userId, serverId string) error {
+	_, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $serverChannels = (SELECT VALUE array::flatten(categories.channels) FROM ONLY $serverId);
+
+      DELETE member WHERE in=$userId AND out=$serverId;
+      DELETE subscribed WHERE in=$userId AND out IN $serverChannels;
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"userId":   userId,
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
+type createChannelReturn struct {
+	Channel models.Channel `json:"channel"`
+	Members []string       `json:"members"`
+}
+
+func (s *service) CreateChannel(serverId, categoryName, channelType, channelName string) (createChannelReturn, error) {
+	res, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $channel = (CREATE ONLY channels CONTENT {
+          name: $channelName,
+          type: $channelType,
+          private: false,
+      } RETURN AFTER);
+
+      UPDATE $serverId SET categories[WHERE name=$categoryName][0].channels += $channel.id;
+
+      LET $users = (SELECT VALUE <-member.in FROM ONLY $serverId);
+      RELATE $users->subscribed->$channel;
+
+      RETURN {
+        channel: $channel,
+        members: $users
+      };
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"channelName":  channelName,
+		"channelType":  channelType,
+		"categoryName": categoryName,
+		"serverId":     serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return createChannelReturn{}, fmt.Errorf("an error occured while leaving the server")
+	}
+
+	channelAndMembers, err := surrealdb.SmartUnmarshal[createChannelReturn](res, err)
+	if err != nil {
+		log.Println(err)
+		return createChannelReturn{}, fmt.Errorf("an error occured while deleting the server")
+	}
+
+	return channelAndMembers, nil
+}
+
+func (s *service) RemoveChannel(serverId, categoryName, channelId string) error {
+	_, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      DELETE $channelId;
+      UPDATE $serverId SET categories[WHERE name=$categoryName][0].channels -= $channelId;
+      DELETE subscribed WHERE out=$channelId;
+      DELETE messages WHERE channel_id=$channelId;
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"categoryName": categoryName,
+		"channelId":    channelId,
+		"serverId":     serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
+func (s *service) CreateCategory(serverId, categoryName string) error {
+	_, err := s.db.Query(`UPDATE $serverId SET categories += { name: $categoryName, channels: []};`, map[string]string{
+		"categoryName": categoryName,
+		"serverId":     serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
+func (s *service) RemoveCategory(serverId, categoryName string) error {
+	_, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $category = SELECT VALUE categories[WHERE name=$categoryName][0] FROM ONLY $serverId;
+      UPDATE $serverId SET categories -= $category;
+      DELETE $category.channels;
+      DELETE messages WHERE channel_id IN $category.channels;
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"categoryName": categoryName,
+		"serverId":     serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
 }

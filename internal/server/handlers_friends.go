@@ -23,6 +23,11 @@ type AcceptFriendBody struct {
 	NotifId   string `json:"id"`
 }
 
+type RemoveFriendBody struct {
+	UserId   string `json:"user_id"`
+	FriendId string `json:"friend_id"`
+}
+
 func (s *Server) HandlerFriends(c echo.Context) error {
 	resp := make(map[string]any)
 
@@ -83,7 +88,7 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 	body := new(AcceptFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
-		resp["message"] = "An error occured when sending your message."
+		resp["message"] = "An error occured when accepting friend request."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -121,7 +126,7 @@ func (s *Server) HandlerRefuseFriend(c echo.Context) error {
 	body := new(AcceptFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
-		resp["message"] = "An error occured when sending your message."
+		resp["message"] = "An error occured when refusing friend request."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -132,6 +137,44 @@ func (s *Server) HandlerRefuseFriend(c echo.Context) error {
 		resp["message"] = "An error occured when refusing friend request."
 
 		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	resp["message"] = "success"
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerRemoveFriend(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(RemoveFriendBody)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["message"] = "An error occured when removing your friend."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+	fmt.Println(body)
+
+	err := s.db.RemoveFriend(body.UserId, body.FriendId)
+	if err != nil {
+		log.Println("error when refusing friend request", err)
+		resp["message"] = "An error occured when removing your friend."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	if conn, ok := s.ws.sessions.Load(strings.Split(body.FriendId, ":")[1]); ok {
+		mess := models.WSMessage{
+			Type:    "friend_remove",
+			Content: body.UserId,
+		}
+		data, err := json.Marshal(mess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		conn.WriteMessage(gws.OpcodeText, data)
 	}
 
 	resp["message"] = "success"

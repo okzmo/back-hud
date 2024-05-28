@@ -85,6 +85,10 @@ func Sub(em *event_emitter.EventEmitter[*Socket], topic string, socket *Socket) 
 	})
 }
 
+func Unsub(em *event_emitter.EventEmitter[*Socket], topic string, socket *Socket) {
+	em.UnSubscribe(socket, topic)
+}
+
 func Pub(em *event_emitter.EventEmitter[*Socket], topic string, op gws.Opcode, msg []byte) {
 	broadcaster := gws.NewBroadcaster(op, msg)
 	defer broadcaster.Close()

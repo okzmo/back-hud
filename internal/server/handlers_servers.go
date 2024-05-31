@@ -22,7 +22,7 @@ type CreateServerBody struct {
 	Name   string `json:"name"`
 }
 
-type DeleteLeaveServerBody struct {
+type GeneralServerBody struct {
 	UserId   string `json:"user_id"`
 	ServerId string `json:"server_id"`
 }
@@ -142,7 +142,7 @@ func (s *Server) HandlerCreateServer(c echo.Context) error {
 func (s *Server) HandlerDeleteServer(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(DeleteLeaveServerBody)
+	body := new(GeneralServerBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
@@ -177,7 +177,7 @@ func (s *Server) HandlerDeleteServer(c echo.Context) error {
 func (s *Server) HandlerLeaveServer(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(DeleteLeaveServerBody)
+	body := new(GeneralServerBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
@@ -194,6 +194,30 @@ func (s *Server) HandlerLeaveServer(c echo.Context) error {
 	}
 
 	resp["success"] = true
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerCreateInvitation(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(GeneralServerBody)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when leaving the server."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	invitationId, err := s.db.CreateInvitation(body.UserId, body.ServerId)
+	if err != nil {
+		resp["name"] = "unexpected"
+		resp["message"] = err.Error()
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	resp["id"] = invitationId
 
 	return c.JSON(http.StatusOK, resp)
 }

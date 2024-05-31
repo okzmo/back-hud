@@ -59,5 +59,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	api.GET("/notifications/:userId", s.HandlerNotifications)
 
+	api.POST("/invites/create", s.HandlerCreateInvitation)
+
 	return e
 }

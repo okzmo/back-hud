@@ -13,10 +13,10 @@ import (
 )
 
 type CreateMessage struct {
-	Author         models.User `json:"author"`
-	ChannelId      string      `json:"channel_id"`
-	Content        string      `json:"content"`
-	PrivateMessage bool        `json:"private_message"`
+	Author         models.User     `json:"author"`
+	ChannelId      string          `json:"channel_id"`
+	Content        json.RawMessage `json:"content"`
+	PrivateMessage bool            `json:"private_message"`
 }
 
 func (s *Server) HandlerPrivateMessages(c echo.Context) error {
@@ -58,7 +58,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	body := new(CreateMessage)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
-		resp["message"] = "An error occured when sending your message."
+		resp["message"] = "An error occurred when sending your message."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}

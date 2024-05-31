@@ -49,7 +49,7 @@ type Message struct {
 	ID        string `json:"id,omitempty"`
 	Author    User   `json:"author"`
 	ChannelId string `json:"channel_id"`
-	Content   string `json:"content"`
+	Content   any    `json:"content"`
 	Edited    bool   `json:"edited"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 	CreatedAt string `json:"created_at,omitempty"`

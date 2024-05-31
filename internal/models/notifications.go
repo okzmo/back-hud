@@ -9,3 +9,12 @@ type FriendRequest struct {
 	Type        string `json:"type"`
 	UserId      string `json:"user_id"`
 }
+
+type MessageNotif struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	UserId    string `json:"user_id"`
+	ChannelId string `json:"channel_id"`
+	Counter   int    `json:"counter"`
+	CreatedAt string `json:"created_at"`
+}

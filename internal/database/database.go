@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"goback/internal/models"
+	"goback/internal/utils"
 	"log"
 	"os"
 	"slices"
@@ -40,6 +41,8 @@ type Service interface {
 	RemoveChannel(serverId, categoryName, channelId string) error
 	CreateCategory(serverId, name string) error
 	RemoveCategory(serverId, name string) error
+	CreateInvitation(userId, serverId string) (string, error)
+	CreateMessageNotification(message models.Message) (models.MessageNotif, error)
 }
 
 type service struct {
@@ -263,7 +266,7 @@ func (s *service) GetServer(userId, serverId string) (models.Server, error) {
 
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`
-      SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at
+      SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, channel_id, content, id, edited, updated_at, created_at
       FROM messages 
       WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
     `, map[string]string{
@@ -287,9 +290,10 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
+	fmt.Println(res)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -322,6 +326,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 		"content":   message.Content,
 		"edited":    message.Edited,
 	})
+	fmt.Println(createRes)
 	if err != nil {
 		return models.Message{}, err
 	}
@@ -333,7 +338,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	messageRes, err := s.db.Query(`
-    SELECT author.id, author.username, author.display_name, author.avatar, channel_id, content, id, edited, updated_at FROM ONLY $id FETCH author;
+    SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, channel_id, content, id, edited, updated_at FROM ONLY $id FETCH author;
     `, map[string]any{
 		"id": id.ID,
 	})
@@ -348,6 +353,47 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	return messageCreated, nil
+}
+
+func (s *service) CreateMessageNotification(message models.Message) (models.MessageNotif, error) {
+	createRes, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $existingNotif = (SELECT * FROM notifications WHERE channel_id = $channelId LIMIT 1);
+      LET $result = IF $existingNotif {
+          LET $update = UPDATE ONLY $existingNotif SET counter = IF counter < 9 THEN
+            counter + 1
+          ELSE
+            counter
+          END;
+              $update;
+      } ELSE { 
+          LET $create = CREATE ONLY notifications CONTENT {
+          channel_id: $channelId,
+          counter: 1,
+          created_at: time::now(),
+          type: 'new_message',
+          user_id: $authorId
+        };
+          $create;
+      };
+      RETURN $result;
+      COMMIT TRANSACTION;
+    `, map[string]any{
+		"authorId":  message.Author.ID,
+		"channelId": "channels:" + message.ChannelId,
+	})
+	fmt.Println(createRes)
+	if err != nil {
+		return models.MessageNotif{}, err
+	}
+
+	notif, err := surrealdb.SmartUnmarshal[models.MessageNotif](createRes, err)
+	if err != nil {
+		log.Println(err)
+		return models.MessageNotif{}, err
+	}
+
+	return notif, nil
 }
 
 type FriendStruct struct {
@@ -807,4 +853,51 @@ func (s *service) RemoveCategory(serverId, categoryName string) error {
 	}
 
 	return nil
+}
+
+type invitateId struct {
+	InviteId string `json:"invite_id"`
+}
+
+func (s *service) CreateInvitation(userId, serverId string) (string, error) {
+	var invitationId invitateId
+	res, err := s.db.Query(`SELECT invite_id FROM ONLY invites WHERE user_id=$userId AND server_id=$serverId LIMIT 1`, map[string]string{
+		"userId":   userId,
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while leaving the server")
+	}
+
+	invitationId, err = surrealdb.SmartUnmarshal[invitateId](res, err)
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while deleting the server")
+	}
+
+	if len(invitationId.InviteId) > 0 {
+		return invitationId.InviteId, nil
+	}
+
+	id, _ := utils.GenerateRandomId()
+	fmt.Println(id)
+
+	_, err = s.db.Query(`
+      CREATE invites CONTENT {
+          invite_id: $inviteId,
+          server_id: $serverId,
+          user_id: $userId,
+      }
+	   `, map[string]string{
+		"inviteId": id,
+		"userId":   userId,
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return id, nil
 }

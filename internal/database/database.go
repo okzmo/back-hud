@@ -272,7 +272,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
     `, map[string]string{
 		"userId":     userId,
 		"channelId":  "channels:" + channelId,
-		"userId2":    strings.Split(userId, ":")[1],
+		"userId2":    "channels:" + strings.Split(userId, ":")[1],
 		"channelId2": "users:" + channelId,
 	})
 	if err != nil {
@@ -368,21 +368,20 @@ func (s *service) CreateMessageNotification(message models.Message) (models.Mess
               $update;
       } ELSE { 
           LET $create = CREATE ONLY notifications CONTENT {
-          channel_id: $channelId,
-          counter: 1,
-          created_at: time::now(),
-          type: 'new_message',
-          user_id: $authorId
-        };
+            channel_id: $channelId,
+            counter: 1,
+            created_at: time::now(),
+            type: 'new_message',
+            user_id: $userId
+          };
           $create;
       };
       RETURN $result;
       COMMIT TRANSACTION;
     `, map[string]any{
-		"authorId":  message.Author.ID,
-		"channelId": "channels:" + message.ChannelId,
+		"userId":    strings.Split(message.ChannelId, ":")[1],
+		"channelId": message.Author.ID,
 	})
-	fmt.Println(createRes)
 	if err != nil {
 		return models.MessageNotif{}, err
 	}

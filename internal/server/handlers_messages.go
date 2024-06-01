@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"goback/internal/models"
+	"goback/internal/utils"
 	"log"
 	"net/http"
 	"strings"
@@ -30,6 +31,7 @@ func (s *Server) HandlerPrivateMessages(c echo.Context) error {
 		resp["message"] = err
 		return c.JSON(http.StatusNotFound, resp)
 	}
+	fmt.Println(messages)
 
 	resp["messages"] = messages
 
@@ -78,17 +80,25 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	wsMess := models.WSMessage{
-		Type:    "text_message",
-		Content: mess,
-	}
-	data, err := json.Marshal(wsMess)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
 	if body.PrivateMessage {
+		id, _ := utils.GenerateRandomId(10)
+		notif := models.MessageNotif{
+			ID:        id,
+			Type:      "new_message",
+			Counter:   1,
+			UserId:    "users:" + body.ChannelId,
+			ChannelId: "channels:" + strings.Split(body.Author.ID, ":")[1],
+		}
+		wsMess := models.WSMessage{
+			Type:    "text_message",
+			Content: mess,
+			Notif:   notif,
+		}
+		data, err := json.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
 
 		if conn, ok := s.ws.sessions.Load(strings.Split(body.Author.ID, ":")[1]); ok {
 			conn.WriteMessage(gws.OpcodeText, data)
@@ -99,6 +109,23 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			connFriend.WriteMessage(gws.OpcodeText, data)
 		}
 	} else {
+		id, _ := utils.GenerateRandomId(10)
+		notif := models.MessageNotif{
+			ID:        id,
+			Type:      "new_message",
+			UserId:    body.Author.ID,
+			ChannelId: "channels:" + body.ChannelId,
+		}
+		wsMess := models.WSMessage{
+			Type:    "text_message",
+			Content: mess,
+			Notif:   notif,
+		}
+		data, err := json.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
 		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeText, data)
 	}
 

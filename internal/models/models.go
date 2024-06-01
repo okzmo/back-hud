@@ -58,4 +58,5 @@ type Message struct {
 type WSMessage struct {
 	Type    string `json:"type"`
 	Content any    `json:"content"`
+	Notif   any    `json:"notification"`
 }

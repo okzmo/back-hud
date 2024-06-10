@@ -38,11 +38,12 @@ type Category struct {
 }
 
 type Channel struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Private   bool   `json:"private"`
-	CreatedAt string `json:"created_at,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Private      bool   `json:"private"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	Participants []User `json:"participants"`
 }
 
 type Message struct {

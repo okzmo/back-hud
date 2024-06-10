@@ -40,7 +40,7 @@ type Service interface {
 	CreateChannel(serverId, categoryName, channelType, name string) (createChannelReturn, error)
 	RemoveChannel(serverId, categoryName, channelId string) error
 	CreateCategory(serverId, name string) error
-	RemoveCategory(serverId, name string) error
+	RemoveCategory(serverId, name string) ([]string, error)
 	CreateInvitation(userId, serverId string) (string, error)
 	CreateMessageNotification(message models.Message) (models.MessageNotif, error)
 }
@@ -293,7 +293,6 @@ func (s *service) GetChannelMessages(channelId string) ([]models.Message, error)
 	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
-	fmt.Println(res)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -326,7 +325,6 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 		"content":   message.Content,
 		"edited":    message.Edited,
 	})
-	fmt.Println(createRes)
 	if err != nil {
 		return models.Message{}, err
 	}
@@ -624,7 +622,6 @@ func (s *service) JoinServer(userId, inviteId string) (jcServerReturn, error) {
 		"userId":   userId,
 		"serverId": serverId[0],
 	})
-	fmt.Println(res)
 	if err != nil {
 		log.Println(err)
 		return jcServerReturn{}, fmt.Errorf("the invitation is either invalid or has expired")
@@ -689,7 +686,6 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
 		log.Println(err)
 		return jcServerReturn{}, fmt.Errorf("the creation could not be completed, please retry later")
 	}
-	fmt.Println(res)
 
 	server, err := surrealdb.SmartUnmarshal[jcServerReturn](res, err)
 	if err != nil {
@@ -834,13 +830,15 @@ func (s *service) CreateCategory(serverId, categoryName string) error {
 	return nil
 }
 
-func (s *service) RemoveCategory(serverId, categoryName string) error {
-	_, err := s.db.Query(`
+func (s *service) RemoveCategory(serverId, categoryName string) ([]string, error) {
+	res, err := s.db.Query(`
       BEGIN TRANSACTION;
       LET $category = SELECT VALUE categories[WHERE name=$categoryName][0] FROM ONLY $serverId;
       UPDATE $serverId SET categories -= $category;
       DELETE $category.channels;
       DELETE messages WHERE channel_id IN $category.channels;
+
+      RETURN $category.channels;
       COMMIT TRANSACTION;
 	   `, map[string]string{
 		"categoryName": categoryName,
@@ -848,10 +846,16 @@ func (s *service) RemoveCategory(serverId, categoryName string) error {
 	})
 	if err != nil {
 		log.Println(err)
-		return fmt.Errorf("an error occured while leaving the server")
+		return nil, fmt.Errorf("an error occured while leaving the server")
 	}
 
-	return nil
+	channels, err := surrealdb.SmartUnmarshal[[]string](res, err)
+	if err != nil {
+		log.Println(err)
+		return nil, fmt.Errorf("an error occured while deleting the server")
+	}
+
+	return channels, nil
 }
 
 type invitateId struct {
@@ -880,7 +884,6 @@ func (s *service) CreateInvitation(userId, serverId string) (string, error) {
 	}
 
 	id, _ := utils.GenerateRandomId()
-	fmt.Println(id)
 
 	_, err = s.db.Query(`
       CREATE invites CONTENT {

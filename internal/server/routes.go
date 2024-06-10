@@ -13,7 +13,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.Use(middleware.Recover())
 	CORSConfig := middleware.CORSConfig{
 		Skipper:          middleware.DefaultSkipper,
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173"},
+		AllowOrigins:     []string{"https://localhost:5173", "http://localhost:5173", "http://localhost:4173"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
 		AllowCredentials: true,
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderSetCookie, echo.HeaderCookie, echo.HeaderContentType, echo.HeaderAccept},
@@ -30,8 +30,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// auth.GET("/:provider/callback", s.AuthCallbackHandler)
 	// auth.GET("/logout/:provider", s.LogoutHandler)
 
+	e.GET("/ws/:userId", s.HandlerWebsocket)
 	api := e.Group("/api/v1", s.SessionAuthMiddleware)
-	api.GET("/ws/:userId", s.HandlerWebsocket)
 
 	api.GET("/friends/:userId", s.HandlerFriends)
 	api.POST("/friends/add", s.HandlerAddFriend)
@@ -60,6 +60,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.GET("/notifications/:userId", s.HandlerNotifications)
 
 	api.POST("/invites/create", s.HandlerCreateInvitation)
+
+	api.GET("/rtc/:room/:identity", s.HandlerGenerateRTCToken)
 
 	return e
 }

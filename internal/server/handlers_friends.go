@@ -154,7 +154,6 @@ func (s *Server) HandlerRemoveFriend(c echo.Context) error {
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
-	fmt.Println(body)
 
 	err := s.db.RemoveFriend(body.UserId, body.FriendId)
 	if err != nil {

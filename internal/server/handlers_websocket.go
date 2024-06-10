@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 
@@ -30,7 +29,6 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 	if err != nil {
 		log.Println(err)
 	}
-	fmt.Println(servers)
 	channels, err := s.db.GetSubscribedChannels(userIdMain)
 	if err != nil {
 		log.Println(err)

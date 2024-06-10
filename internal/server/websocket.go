@@ -1,6 +1,9 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
+	"goback/internal/models"
 	"time"
 
 	"github.com/lxzan/event_emitter"
@@ -65,6 +68,16 @@ func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 		c.OnPing(socket, nil)
 		return
 	}
+
+	var mess models.WSMessage
+	err := json.Unmarshal(message.Data.Bytes(), &mess)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	obj := mess.Content.(map[string]any)
+	Pub(globalEmitter, obj["serverId"].(string), gws.OpcodeText, message.Data.Bytes())
 }
 
 // EMITTER

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
@@ -115,7 +114,8 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 	session.Value = sess.ID
 	session.Expires = sessionExpire
 	session.HttpOnly = true
-	session.Secure = false
+	session.Secure = true
+	session.SameSite = http.SameSiteNoneMode
 	c.SetCookie(session)
 
 	resp["message"] = "success"
@@ -161,7 +161,6 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 		log.Println(err, match)
 		resp["name"] = "unexpected"
 		resp["message"] = "Please check your login information and try again."
-		fmt.Println(resp)
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -196,7 +195,8 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	session.Path = "/"
 	session.Expires = sessionExpire
 	session.HttpOnly = true
-	session.Secure = false
+	session.Secure = true
+	session.SameSite = http.SameSiteNoneMode
 	c.SetCookie(session)
 
 	resp["message"] = "success"

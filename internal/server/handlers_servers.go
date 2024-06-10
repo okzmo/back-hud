@@ -1,14 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"goback/internal/models"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/labstack/echo/v4"
+	"github.com/livekit/protocol/livekit"
 	"github.com/lxzan/gws"
 )
 
@@ -60,6 +63,24 @@ func (s *Server) HandlerUserServers(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+func (s *Server) getParticipants(channel *models.Channel) ([]models.User, error) {
+	res, _ := s.rtc.ListParticipants(context.Background(), &livekit.ListParticipantsRequest{
+		Room: channel.ID,
+	})
+
+	var participants []models.User
+	for _, user := range res.Participants {
+		userDb, err := s.db.GetUser(user.Identity, "", "")
+		if err != nil {
+			return nil, err
+		}
+
+		participants = append(participants, userDb)
+	}
+
+	return participants, nil
+}
+
 func (s *Server) HandlerServerInformations(c echo.Context) error {
 	resp := make(map[string]any)
 
@@ -72,6 +93,22 @@ func (s *Server) HandlerServerInformations(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
+	var wg sync.WaitGroup
+	for _, cat := range server.Categories {
+		for i := range cat.Channels {
+			wg.Add(1)
+			go func(channel *models.Channel) {
+				defer wg.Done()
+				participants, err := s.getParticipants(channel)
+				if err != nil {
+					log.Print("error on getting participants", err)
+				}
+				channel.Participants = participants
+			}(&cat.Channels[i])
+		}
+	}
+
+	wg.Wait()
 	resp["server"] = server
 
 	return c.JSON(http.StatusOK, resp)

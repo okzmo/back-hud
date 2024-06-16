@@ -113,6 +113,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 	session.Path = "/"
 	session.Value = sess.ID
 	session.Expires = sessionExpire
+	session.Domain = "api.hudori.app"
 	session.HttpOnly = true
 	session.Secure = true
 	session.SameSite = http.SameSiteNoneMode
@@ -194,6 +195,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	session.Value = sess.ID
 	session.Path = "/"
 	session.Expires = sessionExpire
+	session.Domain = "api.hudori.app"
 	session.HttpOnly = true
 	session.Secure = true
 	session.SameSite = http.SameSiteNoneMode

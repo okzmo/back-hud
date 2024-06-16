@@ -54,10 +54,11 @@ var (
 	password  = os.Getenv("DB_PASSWORD")
 	namespace = os.Getenv("DB_NAMESPACE")
 	database  = os.Getenv("DB_DATABASE")
+	url       = os.Getenv("DB_URL")
 )
 
 func New() Service {
-	db, err := surrealdb.New("ws://localhost:8000/rpc")
+	db, err := surrealdb.New(url)
 	if err != nil {
 		panic(err)
 	}

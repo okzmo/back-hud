@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	lksdk "github.com/livekit/server-sdk-go/v2"
 	"github.com/lxzan/event_emitter"
 )
 
@@ -18,6 +19,7 @@ type Server struct {
 	auth auth.Service
 	db   database.Service
 	ws   *Websocket
+	rtc  *lksdk.RoomServiceClient
 }
 
 var globalEmitter = event_emitter.New[*Socket](&event_emitter.Config{
@@ -43,6 +45,7 @@ func NewServer() *http.Server {
 		auth: auth.New(sessionStore),
 		db:   database.New(),
 		ws:   NewWebsocket(),
+		rtc:  NewRTC(),
 	}
 
 	// Declare Server config

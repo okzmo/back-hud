@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/livekit/protocol/livekit"
@@ -93,22 +92,22 @@ func (s *Server) HandlerServerInformations(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
-	var wg sync.WaitGroup
-	for _, cat := range server.Categories {
-		for i := range cat.Channels {
-			wg.Add(1)
-			go func(channel *models.Channel) {
-				defer wg.Done()
-				participants, err := s.getParticipants(channel)
-				if err != nil {
-					log.Print("error on getting participants", err)
-				}
-				channel.Participants = participants
-			}(&cat.Channels[i])
-		}
-	}
-
-	wg.Wait()
+	// var wg sync.WaitGroup
+	// for _, cat := range server.Categories {
+	// 	for i := range cat.Channels {
+	// 		wg.Add(1)
+	// 		go func(channel *models.Channel) {
+	// 			defer wg.Done()
+	// 			participants, err := s.getParticipants(channel)
+	// 			if err != nil {
+	// 				log.Print("error on getting participants", err)
+	// 			}
+	// 			channel.Participants = participants
+	// 		}(&cat.Channels[i])
+	// 	}
+	// }
+	//
+	// wg.Wait()
 	resp["server"] = server
 
 	return c.JSON(http.StatusOK, resp)

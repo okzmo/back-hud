@@ -12,6 +12,10 @@ services:
       DB_URL: ${DB_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       PORT: ${PORT}
+      ENVIRONMENT: ${ENVIRONMENT}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_KEY: ${LIVEKIT_KEY}
+      LIVEKIT_SECRET: ${LIVEKIT_SECRET}
     # ports:
     #   - "8080:8080"
     restart: unless-stopped

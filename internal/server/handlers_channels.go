@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"goback/internal/models"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/livekit/protocol/livekit"
 	"github.com/lxzan/gws"
 )
 
@@ -158,7 +160,7 @@ func (s *Server) HandlerDeleteCategory(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	_, err := s.db.RemoveCategory(body.ServerId, body.CategoryName)
+	channels, err := s.db.RemoveCategory(body.ServerId, body.CategoryName)
 	if err != nil {
 		resp["message"] = err
 		return c.JSON(http.StatusNotFound, resp)
@@ -177,13 +179,13 @@ func (s *Server) HandlerDeleteCategory(c echo.Context) error {
 	}
 	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
 
-	// res, _ := s.rtc.ListRooms(context.Background(), &livekit.ListRoomsRequest{
-	// 	Names: channels,
-	// })
-	// for _, v := range res.Rooms {
-	// 	s.rtc.DeleteRoom(context.Background(), &livekit.DeleteRoomRequest{
-	// 		Room: v.Name,
-	// 	})
-	// }
+	res, _ := s.rtc.ListRooms(context.Background(), &livekit.ListRoomsRequest{
+		Names: channels,
+	})
+	for _, v := range res.Rooms {
+		s.rtc.DeleteRoom(context.Background(), &livekit.DeleteRoomRequest{
+			Room: v.Name,
+		})
+	}
 	return c.JSON(http.StatusOK, resp)
 }

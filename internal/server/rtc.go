@@ -7,9 +7,10 @@ import (
 )
 
 func NewRTC() *lksdk.RoomServiceClient {
+	livekitURL := os.Getenv("LIVEKIT_URL")
 	apiKey := os.Getenv("LIVEKIT_KEY")
 	apiSecret := os.Getenv("LIVEKIT_SECRET")
-	roomClient := lksdk.NewRoomServiceClient("ws://localhost:7880", apiKey, apiSecret)
+	roomClient := lksdk.NewRoomServiceClient(livekitURL, apiKey, apiSecret)
 
 	return roomClient
 }

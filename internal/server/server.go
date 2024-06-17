@@ -1,9 +1,11 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 	"goback/internal/auth"
 	"goback/internal/database"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -47,6 +49,18 @@ func NewServer() *http.Server {
 		ws:   NewWebsocket(),
 		rtc:  NewRTC(),
 	}
+	environment := os.Getenv("ENVIRONMENT")
+
+	var tlsConfig *tls.Config
+	if environment == "DEV" {
+		serverTLSCert, err := tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
+		if err != nil {
+			log.Fatalf("Error loading certificate and key file: %v", err)
+		}
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{serverTLSCert},
+		}
+	}
 
 	// Declare Server config
 	server := &http.Server{
@@ -55,7 +69,7 @@ func NewServer() *http.Server {
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
-		// TLSConfig:    tlsConfig,
+		TLSConfig:    tlsConfig,
 	}
 
 	return server

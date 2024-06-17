@@ -15,6 +15,7 @@ type MessageNotif struct {
 	Type      string `json:"type"`
 	UserId    string `json:"user_id"`
 	ChannelId string `json:"channel_id"`
+	ServerId  string `json:"server_id,omitempty"`
 	Counter   int    `json:"counter"`
 	CreatedAt string `json:"created_at"`
 }

@@ -18,6 +18,7 @@ type CreateMessage struct {
 	ChannelId      string          `json:"channel_id"`
 	Content        json.RawMessage `json:"content"`
 	PrivateMessage bool            `json:"private_message"`
+	ServerId       string          `json:"server_id,omitempty"`
 }
 
 func (s *Server) HandlerPrivateMessages(c echo.Context) error {
@@ -79,6 +80,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
+	fmt.Println(body)
 	if body.PrivateMessage {
 		id, _ := utils.GenerateRandomId(10)
 		notif := models.MessageNotif{
@@ -86,7 +88,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Type:      "new_message",
 			Counter:   1,
 			UserId:    "users:" + body.ChannelId,
-			ChannelId: "channels:" + strings.Split(body.Author.ID, ":")[1],
+			ChannelId: "users:" + strings.Split(body.Author.ID, ":")[1],
 		}
 		wsMess := models.WSMessage{
 			Type:    "text_message",
@@ -114,6 +116,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Type:      "new_message",
 			UserId:    body.Author.ID,
 			ChannelId: "channels:" + body.ChannelId,
+			ServerId:  body.ServerId,
 		}
 		wsMess := models.WSMessage{
 			Type:    "text_message",

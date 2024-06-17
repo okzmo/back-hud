@@ -106,10 +106,8 @@ func (s *Server) HandlerServerInformations(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
-	fmt.Println(server)
 	var wg sync.WaitGroup
 	for _, cat := range server.Categories {
-		fmt.Println(cat)
 		for i := range cat.Channels {
 			wg.Add(1)
 			go func(channel *models.Channel) {

@@ -114,11 +114,11 @@ func (s *Server) HandlerServerInformations(c echo.Context) error {
 			wg.Add(1)
 			go func(channel *models.Channel) {
 				defer wg.Done()
-				_, err := s.getParticipants(channel)
+				participants, err := s.getParticipants(channel)
 				if err != nil {
 					log.Print("error on getting participants", err)
 				}
-				// channel.Participants = participants
+				channel.Participants = participants
 			}(&cat.Channels[i])
 		}
 	}

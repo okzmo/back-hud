@@ -16,7 +16,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		AllowOrigins:     []string{"https://localhost:5173", "http://localhost:5173", "http://localhost:4173", "https://api.hudori.app", "https://hudori.app"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
 		AllowCredentials: true,
-		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderSetCookie, echo.HeaderCookie, echo.HeaderContentType, echo.HeaderAccept},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderSetCookie, echo.HeaderCookie, echo.HeaderContentType, echo.HeaderAccept, "X-User-Agent", "X-User-ID"},
 	}
 	e.Use(middleware.CORSWithConfig(CORSConfig))
 

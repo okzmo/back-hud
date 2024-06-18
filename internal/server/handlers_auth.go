@@ -168,7 +168,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 
 	sessionCreated := models.Session{
 		IpAddress: c.RealIP(),
-		UserAgent: c.Request().UserAgent(),
+		UserAgent: c.Request().Header.Get("X-User-Agent"),
 		UserId:    user.ID,
 	}
 
@@ -203,11 +203,14 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
+		"id":          user.ID,
+		"email":       user.Email,
 		"username":    user.Username,
 		"displayName": user.DisplayName,
 		"avatar":      user.Avatar,
 		"banner":      user.Banner,
 		"status":      user.Status,
+		"about_me":    user.AboutMe,
 	}
 
 	return c.JSON(http.StatusOK, resp)

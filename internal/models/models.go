@@ -1,16 +1,17 @@
 package models
 
 type User struct {
-	ID          string `json:"id,omitempty"`
-	Email       string `json:"email,omitempty"`
-	Password    string `json:"password,omitempty"`
-	Username    string `json:"username,omitempty"`
-	DisplayName string `json:"display_name,omitempty"`
-	Avatar      string `json:"avatar,omitempty"`
-	Banner      string `json:"banner,omitempty"`
-	Status      string `json:"status,omitempty"`
-	AboutMe     string `json:"about_me"`
-	CreatedAt   string `json:"created_at,omitempty"`
+	ID            string `json:"id,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Password      string `json:"password,omitempty"`
+	Username      string `json:"username,omitempty"`
+	DisplayName   string `json:"display_name,omitempty"`
+	Avatar        string `json:"avatar,omitempty"`
+	Banner        string `json:"banner,omitempty"`
+	Status        string `json:"status,omitempty"`
+	AboutMe       string `json:"about_me"`
+	UsernameColor string `json:"username_color,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
 }
 
 type Session struct {

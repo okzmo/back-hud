@@ -121,11 +121,15 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"username":    userCreated.Username,
-		"displayName": userCreated.DisplayName,
-		"avatar":      userCreated.Avatar,
-		"banner":      userCreated.Banner,
-		"status":      userCreated.Status,
+		"id":             userCreated.ID,
+		"username":       userCreated.Username,
+		"display_name":   userCreated.DisplayName,
+		"avatar":         userCreated.Avatar,
+		"banner":         userCreated.Banner,
+		"status":         userCreated.Status,
+		"about_me":       userCreated.AboutMe,
+		"email":          userCreated.Email,
+		"username_color": userCreated.UsernameColor,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -203,14 +207,15 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"id":          user.ID,
-		"email":       user.Email,
-		"username":    user.Username,
-		"displayName": user.DisplayName,
-		"avatar":      user.Avatar,
-		"banner":      user.Banner,
-		"status":      user.Status,
-		"about_me":    user.AboutMe,
+		"id":             user.ID,
+		"email":          user.Email,
+		"username":       user.Username,
+		"displayName":    user.DisplayName,
+		"avatar":         user.Avatar,
+		"banner":         user.Banner,
+		"status":         user.Status,
+		"about_me":       user.AboutMe,
+		"username_color": user.UsernameColor,
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -244,14 +249,15 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
-		"id":           user.ID,
-		"username":     user.Username,
-		"display_name": user.DisplayName,
-		"avatar":       user.Avatar,
-		"banner":       user.Banner,
-		"status":       user.Status,
-		"about_me":     user.AboutMe,
-		"email":        user.Email,
+		"id":             user.ID,
+		"username":       user.Username,
+		"display_name":   user.DisplayName,
+		"avatar":         user.Avatar,
+		"banner":         user.Banner,
+		"status":         user.Status,
+		"about_me":       user.AboutMe,
+		"email":          user.Email,
+		"username_color": user.UsernameColor,
 	}
 
 	return c.JSON(http.StatusOK, resp)

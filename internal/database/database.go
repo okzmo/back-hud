@@ -304,7 +304,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, author.username_color, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
 	if err != nil {

@@ -280,7 +280,7 @@ func (s *service) GetServer(userId, serverId string) (models.Server, error) {
 
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`
-      SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, channel_id, content, id, edited, updated_at, created_at
+      SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, author.username_color, channel_id, content, id, edited, updated_at, created_at
       FROM messages 
       WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
     `, map[string]string{

@@ -251,7 +251,31 @@ func (s *Server) HandlerVerify(c echo.Context) error {
 		"banner":       user.Banner,
 		"status":       user.Status,
 		"about_me":     user.AboutMe,
+		"email":        user.Email,
 	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerLogout(c echo.Context) error {
+	resp := make(map[string]any)
+
+	sessionCookie, err := c.Cookie("session")
+	if err != nil {
+		resp["message"] = "No session cookie available."
+
+		return c.JSON(http.StatusUnauthorized, resp)
+	}
+
+	err = s.db.DeleteSession(sessionCookie.Value)
+	if err != nil {
+		log.Println(err)
+		resp["message"] = "No session related to given id."
+
+		return c.JSON(http.StatusUnauthorized, resp)
+	}
+
+	resp["message"] = "success"
 
 	return c.JSON(http.StatusOK, resp)
 }

@@ -63,5 +63,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	api.GET("/rtc/:room/:identity", s.HandlerGenerateRTCToken)
 
+	api.POST("/user/change_email", s.HandlerChangeEmail)
+	api.POST("/user/change_username", s.HandlerChangeUsername)
+	api.POST("/user/change_name", s.HandlerChangeDisplayName)
+	api.POST("/user/logout", s.HandlerLogout)
+
 	return e
 }

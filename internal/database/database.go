@@ -20,6 +20,7 @@ type Service interface {
 	CreateSession(session models.Session) (models.Session, error)
 	GetUser(id, username, email string) (models.User, error)
 	GetSession(id string) (models.Session, error)
+	DeleteSession(id string) error
 	GetFriends(userId string) ([]models.User, error)
 	GetUsersFromChannel(channelId string) ([]string, error)
 	GetUserServers(userId string) ([]models.Server, error)
@@ -43,6 +44,9 @@ type Service interface {
 	RemoveCategory(serverId, name string) ([]string, error)
 	CreateInvitation(userId, serverId string) (string, error)
 	CreateMessageNotification(message models.Message) (models.MessageNotif, error)
+	ChangeEmail(userId, email string) error
+	ChangeUsername(userId, username string) error
+	ChangeDisplayName(userId, displayName string) error
 }
 
 type service struct {
@@ -162,6 +166,15 @@ func (s *service) GetSession(sessionId string) (models.Session, error) {
 	}
 
 	return session, nil
+}
+
+func (s *service) DeleteSession(sessionId string) error {
+	_, err := s.db.Delete(sessionId)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *service) GetFriends(userId string) ([]models.User, error) {
@@ -903,4 +916,43 @@ func (s *service) CreateInvitation(userId, serverId string) (string, error) {
 	}
 
 	return id, nil
+}
+
+func (s *service) ChangeEmail(userId, email string) error {
+	_, err := s.db.Query(`UPDATE $userId SET email=$email`, map[string]string{
+		"userId": userId,
+		"email":  email,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
+func (s *service) ChangeUsername(userId, username string) error {
+	_, err := s.db.Query(`UPDATE $userId SET username=$username`, map[string]string{
+		"userId":   userId,
+		"username": username,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
+func (s *service) ChangeDisplayName(userId, displayName string) error {
+	_, err := s.db.Query(`UPDATE $userId SET display_name=$displayName`, map[string]string{
+		"userId":      userId,
+		"displayName": displayName,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
 }

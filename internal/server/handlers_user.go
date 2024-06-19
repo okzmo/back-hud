@@ -200,10 +200,7 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 		bannerKey = userId + "-banner-" + randId + ".jpg"
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
 	go func() {
-		defer wg.Done()
 		res, err := s.s3.GetObject(&s3.GetObjectInput{
 			Bucket: aws.String("Hudori"),
 			Key:    aws.String(oldBannerName),
@@ -222,6 +219,8 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 		}
 	}()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		_, err = s.s3.PutObject(&s3.PutObjectInput{

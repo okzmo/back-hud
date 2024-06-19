@@ -7,7 +7,8 @@ RUN apk update && apk add --no-cache \
   g++ \
   make \
   pkgconfig \
-  vips-dev
+  vips-dev \
+  gifsicle
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -28,7 +29,7 @@ RUN go build -o main cmd/api/main.go
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates vips
+RUN apk --no-cache add ca-certificates vips gifsicle
 
 # Set the Current Working Directory inside the container
 WORKDIR /root/

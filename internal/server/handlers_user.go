@@ -2,13 +2,12 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"goback/internal/utils"
-	"image"
-	"image/draw"
-	"image/gif"
 	"io"
 	"log"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -171,63 +170,22 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 	var bannerKey string
 	randId, _ := utils.GenerateRandomId(6)
 	if mimeType == "image/gif" {
+		cmd := exec.Command("gifsicle",
+			"--crop", fmt.Sprintf("%d,%d+%dx%d", cropX, cropY, cropWidth, cropHeight),
+			"--output", "-",
+			"--", "-",
+		)
 
-		gifImage, err := gif.DecodeAll(bytes.NewReader(imageBuffer))
+		cmd.Stdin = bytes.NewReader(imageBuffer)
+		var outputBuf bytes.Buffer
+		cmd.Stdout = &outputBuf
+
+		err = cmd.Run()
 		if err != nil {
-			return c.String(http.StatusInternalServerError, "Failed to decode GIF")
+			return c.String(http.StatusInternalServerError, "Failed to crop GIF with gifsicle")
 		}
 
-		croppedGif := &gif.GIF{
-			Image:     make([]*image.Paletted, len(gifImage.Image)),
-			Delay:     gifImage.Delay,
-			Disposal:  gifImage.Disposal,
-			LoopCount: gifImage.LoopCount,
-		}
-
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-
-		for i, frame := range gifImage.Image {
-			wg.Add(1)
-			go func(i int, frame *image.Paletted) {
-				defer wg.Done()
-
-				var frameBuf bytes.Buffer
-				err := gif.Encode(&frameBuf, frame, nil)
-				if err != nil {
-					log.Println("Failed to encode frame:", err)
-					return
-				}
-
-				croppedFrame, err := bimg.NewImage(frameBuf.Bytes()).Extract(cropY, cropX, cropWidth, cropHeight)
-				if err != nil {
-					log.Println("Failed to crop frame", err)
-					return
-				}
-
-				croppedFrameImg, _, err := image.Decode(bytes.NewReader(croppedFrame))
-				if err != nil {
-					log.Println("Failed to decode cropped frame", err)
-					return
-				}
-
-				palettedFrame := image.NewPaletted(croppedFrameImg.Bounds(), frame.Palette)
-				draw.Draw(palettedFrame, palettedFrame.Rect, croppedFrameImg, image.Point{}, draw.Over)
-
-				mu.Lock()
-				croppedGif.Image[i] = palettedFrame
-				mu.Unlock()
-			}(i, frame)
-		}
-		wg.Wait()
-
-		var croppedBuf bytes.Buffer
-		err = gif.EncodeAll(&croppedBuf, croppedGif)
-		if err != nil {
-			return c.String(http.StatusInternalServerError, "Failed to encode cropped GIF")
-		}
-
-		imageToUpload = croppedBuf.Bytes()
+		imageToUpload = outputBuf.Bytes()
 		bannerKey = userId + "-banner-" + randId + ".gif"
 	} else {
 		croppedImage, err := bimg.NewImage(imageBuffer).Extract(cropY, cropX, cropWidth, cropHeight)
@@ -242,32 +200,40 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 		bannerKey = userId + "-banner-" + randId + ".jpg"
 	}
 
-	res, err := s.s3.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String("Hudori"),
-		Key:    aws.String(oldBannerName),
-	})
-	if err != nil {
-		log.Println(err)
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		res, err := s.s3.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(oldBannerName),
+		})
+		if err != nil {
+			log.Println(err)
+		}
 
-	_, err = s.s3.DeleteObject(&s3.DeleteObjectInput{
-		Bucket:    aws.String("Hudori"),
-		Key:       aws.String(oldBannerName),
-		VersionId: res.VersionId,
-	})
-	if err != nil {
-		log.Println(err)
-	}
+		_, err = s.s3.DeleteObject(&s3.DeleteObjectInput{
+			Bucket:    aws.String("Hudori"),
+			Key:       aws.String(oldBannerName),
+			VersionId: res.VersionId,
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
 
-	_, err = s.s3.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String("Hudori"),
-		Key:    aws.String(bannerKey),
-		Body:   bytes.NewReader(imageToUpload),
-	})
-	if err != nil {
-		log.Println(err)
-		return c.String(http.StatusInternalServerError, "Failed to upload file")
-	}
+	go func() {
+		defer wg.Done()
+		_, err = s.s3.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(bannerKey),
+			Body:   bytes.NewReader(imageToUpload),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	wg.Wait()
 
 	banner, err := s.db.UpdateBanner(userId, bannerKey)
 	if err != nil {

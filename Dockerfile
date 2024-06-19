@@ -1,6 +1,14 @@
 # Stage 1: Build the Go application
 FROM golang:1.22-alpine AS builder
 
+# Install build dependencies
+RUN apk update && apk add --no-cache \
+  gcc \
+  g++ \
+  make \
+  pkgconfig \
+  vips-dev
+
 # Set the Current Working Directory inside the container
 WORKDIR /app
 
@@ -18,6 +26,9 @@ RUN go build -o main cmd/api/main.go
 
 # Stage 2: Run the Go application
 FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates vips
 
 # Set the Current Working Directory inside the container
 WORKDIR /root/

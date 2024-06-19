@@ -16,6 +16,10 @@ services:
       LIVEKIT_URL: ${LIVEKIT_URL}
       LIVEKIT_KEY: ${LIVEKIT_KEY}
       LIVEKIT_SECRET: ${LIVEKIT_SECRET}
+      B2_ID: ${B2_ID}
+      B2_KEY: ${B2_KEY}
+      B2_ENDPOINT: ${B2_ENDPOINT}
+      B2_REGION: ${B2_REGION}
     # ports:
     #   - "8080:8080"
     restart: unless-stopped

@@ -11,6 +11,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	_ "github.com/joho/godotenv/autoload"
 	lksdk "github.com/livekit/server-sdk-go/v2"
 	"github.com/lxzan/event_emitter"
@@ -22,6 +26,7 @@ type Server struct {
 	db   database.Service
 	ws   *Websocket
 	rtc  *lksdk.RoomServiceClient
+	s3   *s3.S3
 }
 
 var globalEmitter = event_emitter.New[*Socket](&event_emitter.Config{
@@ -42,12 +47,28 @@ func NewServer() *http.Server {
 		HttpOnly:   true,
 	})
 
+	// S3 session
+	s3Config := &aws.Config{
+		Credentials:      credentials.NewStaticCredentials(os.Getenv("B2_ID"), os.Getenv("B2_KEY"), ""),
+		Endpoint:         aws.String(os.Getenv("B2_ENDPOINT")),
+		Region:           aws.String(os.Getenv("B2_REGION")),
+		S3ForcePathStyle: aws.Bool(true),
+	}
+
+	newSession, err := session.NewSession(s3Config)
+	if err != nil {
+		fmt.Printf("Failed to create a new session s3")
+	}
+
+	s3Client := s3.New(newSession)
+
 	NewServer := &Server{
 		port: port,
 		auth: auth.New(sessionStore),
 		db:   database.New(),
 		ws:   NewWebsocket(),
 		rtc:  NewRTC(),
+		s3:   s3Client,
 	}
 	environment := os.Getenv("ENVIRONMENT")
 

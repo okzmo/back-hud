@@ -172,6 +172,7 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 	if mimeType == "image/gif" {
 		cmd := exec.Command("gifsicle",
 			"--crop", fmt.Sprintf("%d,%d+%dx%d", cropX, cropY, cropWidth, cropHeight),
+			"--lossy=90",
 			"--output", "-",
 			"--", "-",
 		)

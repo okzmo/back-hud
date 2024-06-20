@@ -86,7 +86,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 
 	sessionCreated := models.Session{
 		IpAddress: c.RealIP(),
-		UserAgent: c.Request().UserAgent(),
+		UserAgent: c.Request().Header.Get("X-User-Agent"),
 		UserId:    userId,
 	}
 
@@ -113,7 +113,7 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 	session.Path = "/"
 	session.Value = sess.ID
 	session.Expires = sessionExpire
-	session.Domain = "api.hudori.app"
+	session.Domain = ".hudori.app"
 	session.HttpOnly = true
 	session.Secure = true
 	session.SameSite = http.SameSiteNoneMode
@@ -199,7 +199,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 	session.Value = sess.ID
 	session.Path = "/"
 	session.Expires = sessionExpire
-	session.Domain = "api.hudori.app"
+	session.Domain = ".hudori.app"
 	session.HttpOnly = true
 	session.Secure = true
 	session.SameSite = http.SameSiteNoneMode

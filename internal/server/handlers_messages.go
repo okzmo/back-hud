@@ -80,7 +80,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	fmt.Println(body)
 	if body.PrivateMessage {
 		id, _ := utils.GenerateRandomId(10)
 		notif := models.MessageNotif{

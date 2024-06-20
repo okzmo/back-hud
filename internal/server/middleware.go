@@ -16,12 +16,7 @@ func (s *Server) SessionAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.NewHTTPError(403, "Invalid session")
 		}
 
-		if sess.UserAgent != c.Request().Header.Get("X-User-Agent") {
-			return echo.NewHTTPError(403, "Invalid session")
-		}
-
 		userId := c.Request().Header.Get("X-User-ID")
-
 		if userId != "" && userId != sess.UserId {
 			return echo.NewHTTPError(403, "Invalid session")
 		}

@@ -281,7 +281,7 @@ func (s *service) GetServer(userId, serverId string) (models.Server, error) {
 
 func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`
-      SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, author.username_color, channel_id, content, id, edited, updated_at, created_at
+      SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, author.username_color, channel_id, content, id, edited, images, updated_at, created_at
       FROM messages 
       WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
     `, map[string]string{
@@ -305,7 +305,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, author.username_color, channel_id, content, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, author.username_color, channel_id, content, images, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
 	if err != nil {
@@ -327,19 +327,23 @@ type CreateMessage struct {
 }
 
 func (s *service) CreateMessage(message models.Message) (models.Message, error) {
+	fmt.Println(message)
 	createRes, err := s.db.Query(`
     CREATE ONLY messages CONTENT {
       "author": $authorId,
       "channel_id": $channelId,
       "content": $content,
       "edited": $edited,
+      "images": $images,
     } RETURN id;
     `, map[string]any{
 		"authorId":  message.Author.ID,
 		"channelId": "channels:" + message.ChannelId,
 		"content":   message.Content,
 		"edited":    message.Edited,
+		"images":    message.Images,
 	})
+	fmt.Println(createRes)
 	if err != nil {
 		return models.Message{}, err
 	}
@@ -351,7 +355,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	messageRes, err := s.db.Query(`
-    SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, channel_id, content, id, edited, updated_at FROM ONLY $id FETCH author;
+    SELECT author.id, author.username, author.display_name, author.avatar, author.about_me, author.banner, channel_id, content, images, id, edited, updated_at FROM ONLY $id FETCH author;
     `, map[string]any{
 		"id": id.ID,
 	})

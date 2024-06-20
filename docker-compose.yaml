@@ -20,6 +20,7 @@ services:
       B2_KEY: ${B2_KEY}
       B2_ENDPOINT: ${B2_ENDPOINT}
       B2_REGION: ${B2_REGION}
+      B2_URL: ${B2_URL}
     # ports:
     #   - "8080:8080"
     restart: unless-stopped

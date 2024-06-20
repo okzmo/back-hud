@@ -6,9 +6,14 @@ import (
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/labstack/echo/v4"
 	"github.com/lxzan/gws"
 )
@@ -58,10 +63,10 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	resp := make(map[string]any)
 
 	body := new(CreateMessage)
-	if err := c.Bind(body); err != nil {
-		log.Println(err)
-		resp["message"] = "An error occurred when sending your message."
-
+	bodyStr := c.FormValue("body")
+	if err := json.Unmarshal([]byte(bodyStr), body); err != nil {
+		log.Println("Error parsing JSON body:", err)
+		resp["message"] = "An error occurred when parsing your message."
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
@@ -70,6 +75,53 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		ChannelId: body.ChannelId,
 		Content:   body.Content,
 		Edited:    false,
+		Images:    make([]string, 0),
+	}
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		log.Println("Error parsing form data:", err)
+		resp["message"] = "An error occurred when parsing your files."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	files := form.File
+	if len(files) > 0 {
+		var wg sync.WaitGroup
+		for _, fileHeader := range files {
+			for _, file := range fileHeader {
+				wg.Add(1)
+				go func(message *models.Message, file *multipart.FileHeader) {
+					defer wg.Done()
+					if file.Size > 8*1024*1024 {
+						resp["error"] = "File size exceeds 8MB limit"
+					}
+
+					src, err := file.Open()
+					if err != nil {
+						log.Println(err)
+						resp["error"] = "File size exceeds 8MB limit"
+						return
+					}
+					defer src.Close()
+
+					randId, _ := utils.GenerateRandomId(10)
+					imageKey := randId + "-" + file.Filename
+					_, err = s.s3.PutObject(&s3.PutObjectInput{
+						Bucket: aws.String("Hudori"),
+						Key:    aws.String(imageKey),
+						Body:   src,
+					})
+					if err != nil {
+						resp["error"] = "File size exceeds 8MB limit"
+						return
+					}
+
+					message.Images = append(message.Images, os.Getenv("B2_URL")+imageKey)
+				}(&message, file)
+			}
+		}
+		wg.Wait()
 	}
 
 	mess, err := s.db.CreateMessage(message)

@@ -1,10 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
 	"log"
+	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -64,12 +67,13 @@ func (s *Server) HandlerSignUp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
+	v := fmt.Sprintf("%v", rand.Intn(6-1)+1)
 	userCreated := models.User{
 		Email:       body.Email,
 		Password:    hashedPassword,
 		Username:    body.Username,
 		DisplayName: body.DisplayName,
-		Avatar:      "avatar",
+		Avatar:      os.Getenv("B2_URL") + "default-avatar-" + v + ".jpg",
 		Banner:      "banner",
 		Status:      "online",
 		AboutMe:     "",

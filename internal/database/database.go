@@ -48,6 +48,7 @@ type Service interface {
 	ChangeUsername(userId, username string) error
 	ChangeDisplayName(userId, displayName string) error
 	UpdateBanner(userId, bannerLink string) (string, error)
+	UpdateAvatar(userId, avatarLink string) (string, error)
 }
 
 type service struct {
@@ -995,4 +996,24 @@ func (s *service) UpdateBanner(userId, bannerKey string) (string, error) {
 	}
 
 	return user.Banner, nil
+}
+
+func (s *service) UpdateAvatar(userId, avatarKey string) (string, error) {
+	res, err := s.db.Query(`UPDATE ONLY $userId SET avatar=$avatarLink RETURN avatar`, map[string]string{
+		"userId":     "users:" + userId,
+		"avatarLink": "https://f003.backblazeb2.com/file/Hudori/" + avatarKey,
+	})
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while leaving the server")
+	}
+	fmt.Println(res)
+
+	user, err := surrealdb.SmartUnmarshal[models.User](res, err)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	return user.Avatar, nil
 }

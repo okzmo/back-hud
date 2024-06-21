@@ -245,3 +245,128 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, resp)
 }
+
+func (s *Server) HandlerChangeAvatar(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(ChangeInformations)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["message"] = "An error occured when changing your avatar."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	userId := strings.Split(c.Request().Header.Get("X-User-ID"), ":")[1]
+
+	cropX, _ := strconv.Atoi(c.FormValue("cropX"))
+	cropY, _ := strconv.Atoi(c.FormValue("cropY"))
+	cropWidth, _ := strconv.Atoi(c.FormValue("cropWidth"))
+	cropHeight, _ := strconv.Atoi(c.FormValue("cropHeight"))
+	oldAvatarName := c.FormValue("old_avatar")
+
+	file, err := c.FormFile("avatar")
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to get file")
+	}
+
+	if file.Size > 8*1024*1024 {
+		resp["message"] = "File size exceeds 8MB limit"
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to open file")
+	}
+	defer src.Close()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, src)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to read image")
+	}
+
+	imageBuffer := buf.Bytes()
+	mimeType := http.DetectContentType(imageBuffer)
+
+	var imageToUpload []byte
+	var avatarKey string
+	randId, _ := utils.GenerateRandomId(6)
+	if mimeType == "image/gif" {
+		cmd := exec.Command("gifsicle",
+			"--crop", fmt.Sprintf("%d,%d+%dx%d", cropX, cropY, cropWidth, cropHeight),
+			"--lossy=90",
+			"--output", "-",
+			"--", "-",
+		)
+
+		cmd.Stdin = bytes.NewReader(imageBuffer)
+		var outputBuf bytes.Buffer
+		cmd.Stdout = &outputBuf
+
+		err = cmd.Run()
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop GIF with gifsicle")
+		}
+
+		imageToUpload = outputBuf.Bytes()
+		avatarKey = userId + "-avatar-" + randId + ".gif"
+	} else {
+		croppedImage, err := bimg.NewImage(imageBuffer).Extract(cropY, cropX, cropWidth, cropHeight)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop image")
+		}
+
+		imageToUpload, err = bimg.NewImage(croppedImage).Convert(bimg.JPEG)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to convert image to jpg")
+		}
+		avatarKey = userId + "-avatar-" + randId + ".jpg"
+	}
+
+	go func() {
+		res, err := s.s3.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(oldAvatarName),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+
+		_, err = s.s3.DeleteObject(&s3.DeleteObjectInput{
+			Bucket:    aws.String("Hudori"),
+			Key:       aws.String(oldAvatarName),
+			VersionId: res.VersionId,
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err = s.s3.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(avatarKey),
+			Body:   bytes.NewReader(imageToUpload),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	wg.Wait()
+
+	avatar, err := s.db.UpdateAvatar(userId, avatarKey)
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to update link")
+	}
+
+	resp["avatar"] = avatar
+
+	return c.JSON(http.StatusOK, resp)
+}

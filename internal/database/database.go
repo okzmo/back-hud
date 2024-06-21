@@ -360,8 +360,6 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 		"images":    message.Images,
 		"mentions":  message.Mentions,
 	})
-	fmt.Println(message.Mentions)
-	fmt.Println(createRes)
 	if err != nil {
 		return models.Message{}, err
 	}

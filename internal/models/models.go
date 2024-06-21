@@ -30,6 +30,7 @@ type Server struct {
 	Banner     string     `json:"banner,omitempty"`
 	Categories []Category `json:"categories,omitempty"`
 	Roles      []string   `json:"roles,omitempty"`
+	Members    []User     `json:"members,omitempty"`
 	CreatedAt  string     `json:"created_at,omitempty"`
 }
 
@@ -54,6 +55,7 @@ type Message struct {
 	Content   any      `json:"content"`
 	Edited    bool     `json:"edited"`
 	Images    []string `json:"images,omitempty"`
+	Mentions  []string `json:"mentions,omitempty"`
 	UpdatedAt string   `json:"updated_at,omitempty"`
 	CreatedAt string   `json:"created_at,omitempty"`
 }

@@ -24,6 +24,7 @@ type CreateMessage struct {
 	Content        json.RawMessage `json:"content"`
 	PrivateMessage bool            `json:"private_message"`
 	ServerId       string          `json:"server_id,omitempty"`
+	Mentions       []string        `json:"mentions,omitempty"`
 }
 
 func (s *Server) HandlerPrivateMessages(c echo.Context) error {
@@ -76,6 +77,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		Content:   body.Content,
 		Edited:    false,
 		Images:    make([]string, 0),
+		Mentions:  make([]string, 0),
 	}
 
 	form, err := c.MultipartForm()
@@ -124,6 +126,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		wg.Wait()
 	}
 
+	message.Mentions = append(message.Mentions, body.Mentions...)
 	mess, err := s.db.CreateMessage(message)
 	if err != nil {
 		log.Println("error when creating a message", err)
@@ -168,6 +171,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			UserId:    body.Author.ID,
 			ChannelId: "channels:" + body.ChannelId,
 			ServerId:  body.ServerId,
+			Mentions:  body.Mentions,
 		}
 		wsMess := models.WSMessage{
 			Type:    "text_message",

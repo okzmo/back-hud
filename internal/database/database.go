@@ -322,7 +322,7 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.avatar, author.banner, author.about_me, author.username_color, channel_id, content, images, mentions, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.display_name, author.avatar, author.username_color, channel_id, content, images, mentions, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
 	if err != nil {
@@ -1007,7 +1007,6 @@ func (s *service) UpdateAvatar(userId, avatarKey string) (string, error) {
 		log.Println(err)
 		return "", fmt.Errorf("an error occured while leaving the server")
 	}
-	fmt.Println(res)
 
 	user, err := surrealdb.SmartUnmarshal[models.User](res, err)
 	if err != nil {

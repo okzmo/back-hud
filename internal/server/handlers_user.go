@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"goback/internal/models"
 	"goback/internal/utils"
 	"io"
 	"log"
@@ -16,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/h2non/bimg"
 	"github.com/labstack/echo/v4"
+	"github.com/lxzan/gws"
 )
 
 type ChangeInformations struct {
@@ -246,6 +249,11 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+type ChangeAvatar struct {
+	UserId string `json:"user_id"`
+	Avatar string `json:"avatar"`
+}
+
 func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 	resp := make(map[string]any)
 
@@ -263,6 +271,16 @@ func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 	cropWidth, _ := strconv.Atoi(c.FormValue("cropWidth"))
 	cropHeight, _ := strconv.Atoi(c.FormValue("cropHeight"))
 	oldAvatarName := c.FormValue("old_avatar")
+	serverId := c.FormValue("server_id")
+	friendsStr := c.FormValue("friends")
+
+	var friends []string
+	err := json.Unmarshal([]byte(friendsStr), &friends)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(friends)
+	log.Println(serverId)
 
 	file, err := c.FormFile("avatar")
 	if err != nil {
@@ -367,6 +385,32 @@ func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 	}
 
 	resp["avatar"] = avatar
+
+	content := ChangeAvatar{
+		UserId: userId,
+		Avatar: avatar,
+	}
+	wsMess := models.WSMessage{
+		Type:    "new_avatar",
+		Content: content,
+	}
+	data, err := json.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if serverId != "" {
+		Pub(globalEmitter, serverId, gws.OpcodeText, data)
+	}
+
+	if len(friends) > 0 {
+		for _, friend := range friends {
+			if connFriend, ok := s.ws.sessions.Load(strings.Split(friend, ":")[1]); ok {
+				connFriend.WriteMessage(gws.OpcodeText, data)
+			}
+		}
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }

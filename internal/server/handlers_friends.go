@@ -12,18 +12,18 @@ import (
 	"github.com/lxzan/gws"
 )
 
-type AddFriendBody struct {
+type addFriendBody struct {
 	InitiatorId       string `json:"initiator_id"`
 	InitiatorUsername string `json:"initiator_username"`
 	ReceiverUsername  string `json:"receiver_username"`
 }
 
-type AcceptFriendBody struct {
+type acceptFriendBody struct {
 	RequestId string `json:"request_id"`
 	NotifId   string `json:"id"`
 }
 
-type RemoveFriendBody struct {
+type removeFriendBody struct {
 	UserId   string `json:"user_id"`
 	FriendId string `json:"friend_id"`
 }
@@ -47,7 +47,7 @@ func (s *Server) HandlerFriends(c echo.Context) error {
 func (s *Server) HandlerAddFriend(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(AddFriendBody)
+	body := new(addFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["message"] = "An error occured when adding your friend."
@@ -85,7 +85,7 @@ func (s *Server) HandlerAddFriend(c echo.Context) error {
 func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(AcceptFriendBody)
+	body := new(acceptFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["message"] = "An error occured when accepting friend request."
@@ -123,7 +123,7 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 func (s *Server) HandlerRefuseFriend(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(AcceptFriendBody)
+	body := new(acceptFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["message"] = "An error occured when refusing friend request."
@@ -147,7 +147,7 @@ func (s *Server) HandlerRefuseFriend(c echo.Context) error {
 func (s *Server) HandlerRemoveFriend(c echo.Context) error {
 	resp := make(map[string]any)
 
-	body := new(RemoveFriendBody)
+	body := new(removeFriendBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["message"] = "An error occured when removing your friend."

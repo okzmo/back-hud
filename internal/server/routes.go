@@ -20,6 +20,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	}
 	e.Use(middleware.CORSWithConfig(CORSConfig))
 
+	e.GET("/invitations/validity/:invitationId", s.HandlerCheckInvitationValidity)
+
 	// Auth
 	auth := e.Group("/auth")
 	auth.POST("/signup", s.HandlerSignUp)
@@ -67,6 +69,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/user/change_email", s.HandlerChangeEmail)
 	api.POST("/user/change_username", s.HandlerChangeUsername)
 	api.POST("/user/change_name", s.HandlerChangeDisplayName)
+	api.POST("/user/change_name_color", s.HandlerChangeNameColor)
 	api.POST("/user/change_banner", s.HandlerChangeBanner)
 	api.POST("/user/change_avatar", s.HandlerChangeAvatar)
 	api.POST("/user/logout", s.HandlerLogout)

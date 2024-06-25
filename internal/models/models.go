@@ -65,3 +65,9 @@ type WSMessage struct {
 	Content any    `json:"content"`
 	Notif   any    `json:"notification"`
 }
+
+type Invitation struct {
+	ID          string `json:"id"`
+	Initiator   User   `json:"initiator"`
+	NumberOfUse int    `json:"number_of_use"`
+}

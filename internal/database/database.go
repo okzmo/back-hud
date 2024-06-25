@@ -47,8 +47,10 @@ type Service interface {
 	ChangeEmail(userId, email string) error
 	ChangeUsername(userId, username string) error
 	ChangeDisplayName(userId, displayName string) error
+	ChangeNameColor(userId, usernameColor string) error
 	UpdateBanner(userId, bannerLink string) (string, error)
 	UpdateAvatar(userId, avatarLink string) (string, error)
+	CheckInvitationValidity(InviteId string) (models.Invitation, error)
 }
 
 type service struct {
@@ -979,6 +981,19 @@ func (s *service) ChangeDisplayName(userId, displayName string) error {
 	return nil
 }
 
+func (s *service) ChangeNameColor(userId, usernameColor string) error {
+	_, err := s.db.Query(`UPDATE $userId SET username_color=$usernameColor`, map[string]string{
+		"userId":        userId,
+		"usernameColor": usernameColor,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while leaving the server")
+	}
+
+	return nil
+}
+
 func (s *service) UpdateBanner(userId, bannerKey string) (string, error) {
 	res, err := s.db.Query(`UPDATE ONLY $userId SET banner=$bannerLink RETURN banner`, map[string]string{
 		"userId":     "users:" + userId,
@@ -1015,4 +1030,34 @@ func (s *service) UpdateAvatar(userId, avatarKey string) (string, error) {
 	}
 
 	return user.Avatar, nil
+}
+
+func (s *service) CheckInvitationValidity(invitationId string) (models.Invitation, error) {
+	res, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      let $invitation = (SELECT id, number_of_use, initiator.display_name, initiator.banner FROM ONLY $invitationId FETCH initiator);
+
+      IF !$invitation {
+          THROW "This invitation does not exist."
+      } ELSE IF $invitation.number_of_use <= 0 {
+          THROW "This invitation has expired."
+      };
+
+      RETURN $invitation;
+      COMMIT TRANSACTION;
+    `, map[string]string{
+		"invitationId": invitationId,
+	})
+	if err != nil {
+		log.Println(err)
+		return models.Invitation{}, fmt.Errorf("an error occured while leaving the server")
+	}
+
+	invitation, err := surrealdb.SmartUnmarshal[models.Invitation](res, err)
+	if err != nil {
+		log.Println(err)
+		return models.Invitation{}, err
+	}
+
+	return invitation, nil
 }

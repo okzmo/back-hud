@@ -22,10 +22,11 @@ import (
 )
 
 type ChangeInformations struct {
-	UserId      string  `json:"user_id"`
-	Username    *string `json:"username,omitempty"`
-	Email       *string `json:"email,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
+	UserId        string  `json:"user_id"`
+	Username      *string `json:"username,omitempty"`
+	UsernameColor *string `json:"username_color,omitempty"`
+	Email         *string `json:"email,omitempty"`
+	DisplayName   *string `json:"display_name,omitempty"`
 }
 
 func (s *Server) HandlerChangeEmail(c echo.Context) error {
@@ -115,6 +116,28 @@ func (s *Server) HandlerChangeDisplayName(c echo.Context) error {
 	if err != nil {
 		log.Println(err)
 		resp["name"] = "display_name"
+		resp["message"] = "An error occured when changing your informations."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	resp["message"] = "success"
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerChangeNameColor(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(ChangeInformations)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["message"] = "An error occured when parsing your informations."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	err := s.db.ChangeNameColor(body.UserId, *body.UsernameColor)
+	if err != nil {
+		log.Println(err)
 		resp["message"] = "An error occured when changing your informations."
 		return c.JSON(http.StatusBadRequest, resp)
 	}

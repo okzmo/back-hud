@@ -73,6 +73,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/user/change_banner", s.HandlerChangeBanner)
 	api.POST("/user/change_avatar", s.HandlerChangeAvatar)
 	api.POST("/user/logout", s.HandlerLogout)
+	api.POST("/user/change_status", s.HandlerChangeStatus)
 
 	return e
 }

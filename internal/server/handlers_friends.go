@@ -1,15 +1,16 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
-	"goback/internal/models"
+	"goback/internal/utils"
+	"goback/proto/protoMess"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/lxzan/gws"
+	"google.golang.org/protobuf/proto"
 )
 
 type addFriendBody struct {
@@ -65,16 +66,29 @@ func (s *Server) HandlerAddFriend(c echo.Context) error {
 	}
 
 	if conn, ok := s.ws.sessions.Load(strings.Split(notif.UserId, ":")[1]); ok {
-		mess := models.WSMessage{
-			Type:    "friend_request",
-			Content: notif,
+		mess := &protoMess.WSMessage{
+			Type: "friend_request",
+			Content: &protoMess.WSMessage_FriendRequest{
+				FriendRequest: &protoMess.FriendRequest{
+					Id:          notif.ID,
+					InitiatorId: notif.InitiatorId,
+					RequestId:   notif.RequestId,
+					Message:     notif.Message,
+					Type:        notif.Type,
+					UserId:      notif.UserId,
+					CreatedAt:   notif.CreatedAt,
+				},
+			},
 		}
-		data, err := json.Marshal(mess)
+
+		data, err := proto.Marshal(mess)
 		if err != nil {
 			log.Println(err)
 			return err
 		}
-		conn.WriteMessage(gws.OpcodeText, data)
+
+		compMess := utils.CompressMess(data)
+		conn.WriteMessage(gws.OpcodeBinary, compMess)
 	}
 
 	resp["message"] = "success"
@@ -102,16 +116,27 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 	}
 
 	if conn, ok := s.ws.sessions.Load(strings.Split(users[0].ID, ":")[1]); ok {
-		mess := models.WSMessage{
-			Type:    "friend_accept",
-			Content: users[1],
+		mess := &protoMess.WSMessage{
+			Type: "friend_accept",
+			Content: &protoMess.WSMessage_FriendAccept{
+				FriendAccept: &protoMess.User{
+					Id:          users[1].ID,
+					DisplayName: users[1].DisplayName,
+					Avatar:      users[1].Avatar,
+					AboutMe:     users[1].AboutMe,
+					Status:      users[1].Status,
+				},
+			},
 		}
-		data, err := json.Marshal(mess)
+
+		data, err := proto.Marshal(mess)
 		if err != nil {
 			log.Println(err)
 			return err
 		}
-		conn.WriteMessage(gws.OpcodeText, data)
+
+		compMess := utils.CompressMess(data)
+		conn.WriteMessage(gws.OpcodeBinary, compMess)
 	}
 
 	resp["message"] = "success"
@@ -164,16 +189,21 @@ func (s *Server) HandlerRemoveFriend(c echo.Context) error {
 	}
 
 	if conn, ok := s.ws.sessions.Load(strings.Split(body.FriendId, ":")[1]); ok {
-		mess := models.WSMessage{
-			Type:    "friend_remove",
-			Content: body.UserId,
+		mess := &protoMess.WSMessage{
+			Type: "friend_remove",
+			Content: &protoMess.WSMessage_UserId{
+				UserId: body.UserId,
+			},
 		}
-		data, err := json.Marshal(mess)
+
+		data, err := proto.Marshal(mess)
 		if err != nil {
 			log.Println(err)
 			return err
 		}
-		conn.WriteMessage(gws.OpcodeText, data)
+
+		compMess := utils.CompressMess(data)
+		conn.WriteMessage(gws.OpcodeBinary, compMess)
 	}
 
 	resp["message"] = "success"

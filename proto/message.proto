@@ -1,0 +1,90 @@
+syntax = "proto3";
+package hudori;
+
+option go_package = "./protoMess";
+
+message User {
+  string id = 1;
+  string email = 2;
+  string password = 3;
+  string username = 4;
+  string display_name = 5;
+  string avatar = 6;
+  string banner = 7;
+  string status = 8;
+  string about_me = 9;
+  string username_color = 10;
+  string created_at = 11;
+}
+
+message Message {
+  string id = 1;
+  User author = 2;
+  string channel_id = 3;
+  string content = 4;
+  bool edited = 5;
+  repeated string images = 6;
+  repeated string mentions = 7;
+  string updated_at = 8;
+  string created_at = 9;
+}
+
+message MessageNotif {
+  string id = 1;
+  string type = 2;
+  string user_id = 3;
+  string channel_id = 4;
+  string server_id = 5;
+  int32 counter = 6;
+  repeated string mentions = 7;
+  string created_at = 8;
+}
+
+message FriendRequest {
+  string id = 1;
+  string initiator_id = 2;
+  string message = 3;
+  string request_id = 4;
+  string type = 5;
+  string user_id = 6;
+  string created_at = 7;
+}
+
+message WSMessage {
+  string type = 1;
+  oneof content {
+    Message mess = 2;
+    string category_name = 3;
+    string user_id = 4;
+    CreateChannel channel = 5;
+    DeleteChannel delchannel = 6;
+    FriendRequest friend_request = 7;
+    User friend_accept = 8;
+    ChangeStatus change_status = 9;
+  }
+  MessageNotif notification = 10;
+}
+
+message CreateChannel {
+  Channel channel = 1;
+  string category_name = 2;
+}
+
+message DeleteChannel {
+  string channel_id = 1;
+  string category_name = 2;
+}
+
+message ChangeStatus {
+  string user_id = 1;
+  string status = 2;
+}
+
+message Channel {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  bool private = 4;
+  string created_at = 5;
+  repeated User participants = 6;
+}

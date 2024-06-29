@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"goback/internal/models"
+	"goback/internal/utils"
+	"goback/proto/protoMess"
 	"log"
 	"net/http"
 	"strings"
@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/livekit/protocol/livekit"
 	"github.com/lxzan/gws"
+	"google.golang.org/protobuf/proto"
 )
 
 type createChannelBody struct {
@@ -57,20 +58,32 @@ func (s *Server) HandlerCreateChannel(c echo.Context) error {
 
 	resp["message"] = "success"
 
-	wsContent := make(map[string]any)
-	wsContent["channel"] = channelAndMembers.Channel
-	wsContent["category_name"] = body.CategoryName
-
-	wsMess := models.WSMessage{
-		Type:    "create_channel",
-		Content: wsContent,
+	channelObj := &protoMess.Channel{
+		Id:        channelAndMembers.Channel.ID,
+		Name:      channelAndMembers.Channel.Name,
+		Type:      channelAndMembers.Channel.Type,
+		Private:   channelAndMembers.Channel.Private,
+		CreatedAt: channelAndMembers.Channel.CreatedAt,
 	}
-	data, err := json.Marshal(wsMess)
+
+	wsMess := &protoMess.WSMessage{
+		Type: "create_channel",
+		Content: &protoMess.WSMessage_Channel{
+			Channel: &protoMess.CreateChannel{
+				Channel:      channelObj,
+				CategoryName: body.CategoryName,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -99,16 +112,24 @@ func (s *Server) HandlerDeleteChannel(c echo.Context) error {
 	wsContent["channel_id"] = body.ChannelId
 	wsContent["category_name"] = body.CategoryName
 
-	wsMess := models.WSMessage{
-		Type:    "delete_channel",
-		Content: wsContent,
+	wsMess := &protoMess.WSMessage{
+		Type: "delete_channel",
+		Content: &protoMess.WSMessage_Delchannel{
+			Delchannel: &protoMess.DeleteChannel{
+				ChannelId:    body.ChannelId,
+				CategoryName: body.CategoryName,
+			},
+		},
 	}
-	data, err := json.Marshal(wsMess)
+
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -133,17 +154,21 @@ func (s *Server) HandlerCreateCategory(c echo.Context) error {
 
 	resp["message"] = "success"
 
-	wsMess := models.WSMessage{
-		Type:    "create_category",
-		Content: body.CategoryName,
+	wsMess := &protoMess.WSMessage{
+		Type: "create_category",
+		Content: &protoMess.WSMessage_CategoryName{
+			CategoryName: body.CategoryName,
+		},
 	}
-	data, err := json.Marshal(wsMess)
+
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -168,16 +193,21 @@ func (s *Server) HandlerDeleteCategory(c echo.Context) error {
 
 	resp["message"] = "success"
 
-	wsMess := models.WSMessage{
-		Type:    "delete_category",
-		Content: body.CategoryName,
+	wsMess := &protoMess.WSMessage{
+		Type: "delete_category",
+		Content: &protoMess.WSMessage_CategoryName{
+			CategoryName: body.CategoryName,
+		},
 	}
-	data, err := json.Marshal(wsMess)
+
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	res, _ := s.rtc.ListRooms(context.Background(), &livekit.ListRoomsRequest{
 		Names: channels,

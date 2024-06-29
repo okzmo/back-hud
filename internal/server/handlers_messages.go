@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
+	"goback/proto/protoMess"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -16,15 +17,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/labstack/echo/v4"
 	"github.com/lxzan/gws"
+	"google.golang.org/protobuf/proto"
 )
 
 type CreateMessage struct {
-	Author         models.User     `json:"author"`
-	ChannelId      string          `json:"channel_id"`
-	Content        json.RawMessage `json:"content"`
-	PrivateMessage bool            `json:"private_message"`
-	ServerId       string          `json:"server_id,omitempty"`
-	Mentions       []string        `json:"mentions,omitempty"`
+	Author         models.User `json:"author"`
+	ChannelId      string      `json:"channel_id"`
+	Content        string      `json:"content"`
+	PrivateMessage bool        `json:"private_message"`
+	ServerId       string      `json:"server_id,omitempty"`
+	Mentions       []string    `json:"mentions,omitempty"`
 }
 
 func (s *Server) HandlerPrivateMessages(c echo.Context) error {
@@ -35,11 +37,11 @@ func (s *Server) HandlerPrivateMessages(c echo.Context) error {
 
 	messages, err := s.db.GetPrivateMessages(userId, channelId)
 	if err != nil {
-		resp["message"] = err
+		resp["error"] = err
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
-	resp["messages"] = messages
+	resp["result"] = messages
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -137,53 +139,98 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 
 	if body.PrivateMessage {
 		id, _ := utils.GenerateRandomId(10)
-		notif := models.MessageNotif{
-			ID:        id,
+		notif := &protoMess.MessageNotif{
+			Id:        id,
 			Type:      "new_message",
-			Counter:   1,
 			UserId:    "users:" + body.ChannelId,
 			ChannelId: "users:" + strings.Split(body.Author.ID, ":")[1],
+			Counter:   1,
 		}
-		wsMess := models.WSMessage{
-			Type:    "text_message",
-			Content: mess,
-			Notif:   notif,
+
+		authorObj := &protoMess.User{
+			Id:            mess.Author.ID,
+			DisplayName:   mess.Author.DisplayName,
+			Avatar:        mess.Author.Avatar,
+			UsernameColor: mess.Author.UsernameColor,
 		}
-		data, err := json.Marshal(wsMess)
+
+		messObj := &protoMess.Message{
+			Id:        mess.ID,
+			Author:    authorObj,
+			ChannelId: mess.ChannelId,
+			Content:   mess.Content,
+			Images:    mess.Images,
+			Mentions:  mess.Mentions,
+			UpdatedAt: mess.UpdatedAt,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "text_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+			Notification: notif,
+		}
+		data, err := proto.Marshal(wsMess)
 		if err != nil {
 			log.Println(err)
 			return err
 		}
 
+		compMess := utils.CompressMess(data)
 		if conn, ok := s.ws.sessions.Load(strings.Split(body.Author.ID, ":")[1]); ok {
-			conn.WriteMessage(gws.OpcodeText, data)
+			conn.WriteMessage(gws.OpcodeBinary, compMess)
 		}
 
 		connFriend, ok := s.ws.sessions.Load(body.ChannelId)
 		if ok {
-			connFriend.WriteMessage(gws.OpcodeText, data)
+			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
 		}
 	} else {
 		id, _ := utils.GenerateRandomId(10)
-		notif := models.MessageNotif{
-			ID:        id,
+		notif := &protoMess.MessageNotif{
+			Id:        id,
 			Type:      "new_message",
 			UserId:    body.Author.ID,
 			ChannelId: "channels:" + body.ChannelId,
 			ServerId:  body.ServerId,
 			Mentions:  body.Mentions,
 		}
-		wsMess := models.WSMessage{
-			Type:    "text_message",
-			Content: mess,
-			Notif:   notif,
+
+		authorObj := &protoMess.User{
+			Id:            mess.Author.ID,
+			DisplayName:   mess.Author.DisplayName,
+			Avatar:        mess.Author.Avatar,
+			UsernameColor: mess.Author.UsernameColor,
 		}
-		data, err := json.Marshal(wsMess)
+
+		messObj := &protoMess.Message{
+			Id:        mess.ID,
+			Author:    authorObj,
+			ChannelId: mess.ChannelId,
+			Content:   mess.Content,
+			Images:    mess.Images,
+			Mentions:  mess.Mentions,
+			UpdatedAt: mess.UpdatedAt,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "text_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+			Notification: notif,
+		}
+		fmt.Println(wsMess)
+
+		data, err := proto.Marshal(wsMess)
 		if err != nil {
 			log.Println(err)
 			return err
 		}
-		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeText, data)
+
+		compMess := utils.CompressMess(data)
+		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 	}
 
 	return c.JSON(http.StatusOK, resp)

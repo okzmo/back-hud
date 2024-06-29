@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	PingInterval = 5 * time.Second
-	PingWait     = 30 * time.Minute
+	PingInterval = 10 * time.Second
+	PingWait     = 15 * time.Second
 )
 
 type Websocket struct {
@@ -57,14 +57,14 @@ func (c *Websocket) OnClose(socket *gws.Conn, err error) {}
 
 func (c *Websocket) OnPing(socket *gws.Conn, payload []byte) {
 	_ = socket.SetDeadline(time.Now().Add(PingInterval + PingWait))
-	_ = socket.WriteString("pong")
+	_ = socket.WriteString("heartbeat")
 }
 
 func (c *Websocket) OnPong(socket *gws.Conn, payload []byte) {}
 
 func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
-	if b := message.Data.Bytes(); len(b) == 4 && string(b) == "ping" {
+	if b := message.Data.Bytes(); len(b) == 9 && string(b) == "heartbeat" {
 		c.OnPing(socket, nil)
 		return
 	}
@@ -77,7 +77,11 @@ func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 	}
 
 	obj := mess.Content.(map[string]any)
-	Pub(globalEmitter, obj["serverId"].(string), gws.OpcodeText, message.Data.Bytes())
+
+	switch mess.Type {
+	case "participant_status":
+		Pub(globalEmitter, obj["serverId"].(string), gws.OpcodeText, message.Data.Bytes())
+	}
 }
 
 // EMITTER

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/mail"
 
+	"github.com/andybalholm/brotli"
 	"github.com/h2non/bimg"
 )
 
@@ -61,4 +62,12 @@ func CropImageGIF(i int, frame *image.Paletted, croppedGif *gif.GIF, cropX, crop
 	croppedGif.Image[i] = palettedFrame
 
 	return nil
+}
+
+func CompressMess(data []byte) []byte {
+	var b bytes.Buffer
+	w := brotli.NewWriterLevel(&b, brotli.BestCompression)
+	w.Write(data)
+	w.Close()
+	return b.Bytes()
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
+	"goback/proto/protoMess"
 	"io"
 	"log"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/h2non/bimg"
 	"github.com/labstack/echo/v4"
 	"github.com/lxzan/gws"
+	"google.golang.org/protobuf/proto"
 )
 
 type ChangeInformations struct {
@@ -27,6 +29,7 @@ type ChangeInformations struct {
 	UsernameColor *string `json:"username_color,omitempty"`
 	Email         *string `json:"email,omitempty"`
 	DisplayName   *string `json:"display_name,omitempty"`
+	Status        *string `json:"status,omitempty"`
 }
 
 func (s *Server) HandlerChangeEmail(c echo.Context) error {
@@ -436,4 +439,58 @@ func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerChangeStatus(c echo.Context) error {
+	body := new(ChangeInformations)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		return c.String(400, "")
+	}
+
+	err := s.db.UpdateUserStatus(strings.Split(body.UserId, ":")[1], *body.Status)
+	if err != nil {
+		log.Println(err)
+		return c.String(400, "")
+	}
+
+	servers, err := s.db.GetUserServers(body.UserId)
+	if err != nil {
+		log.Println(err)
+	}
+
+	friends, err := s.db.GetFriends(body.UserId)
+	if err != nil {
+		log.Println(err)
+	}
+
+	wsMess := &protoMess.WSMessage{
+		Type: "change_status",
+		Content: &protoMess.WSMessage_ChangeStatus{
+			ChangeStatus: &protoMess.ChangeStatus{
+				UserId: body.UserId,
+				Status: *body.Status,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+
+	for _, s := range servers {
+		Pub(globalEmitter, s.ID, gws.OpcodeBinary, compMess)
+	}
+
+	for _, f := range friends {
+		if connFriend, ok := s.ws.sessions.Load(strings.Split(f.ID, ":")[1]); ok {
+			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
+		}
+	}
+
+	return c.String(200, "")
 }

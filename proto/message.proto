@@ -56,13 +56,17 @@ message WSMessage {
     Message mess = 2;
     string category_name = 3;
     string user_id = 4;
-    CreateChannel channel = 5;
-    DeleteChannel delchannel = 6;
-    FriendRequest friend_request = 7;
-    User friend_accept = 8;
-    ChangeStatus change_status = 9;
+    string server_id = 5;
+    CreateChannel channel = 6;
+    DeleteChannel delchannel = 7;
+    FriendRequest friend_request = 8;
+    User friend_accept = 9;
+    ChangeStatus change_status = 10;
+    JoinServer join_server = 11;
+    QuitServer quit_server = 12;
+    ParticipantMove participant_move = 13;
   }
-  MessageNotif notification = 10;
+  MessageNotif notification = 14;
 }
 
 message CreateChannel {
@@ -78,6 +82,25 @@ message DeleteChannel {
 message ChangeStatus {
   string user_id = 1;
   string status = 2;
+}
+
+message JoinServer {
+  string server_id = 1;
+  User user = 2;
+}
+
+message QuitServer {
+  string server_id = 1;
+  string user_id = 2;
+}
+
+message ParticipantMove {
+  User user = 1;
+  string user_id = 2;
+  string server_id = 3;
+  string channel_id = 4;
+  bool deafen = 5;
+  bool muted = 6;
 }
 
 message Channel {

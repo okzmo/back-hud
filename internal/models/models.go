@@ -30,7 +30,7 @@ type Server struct {
 	Banner     string     `json:"banner,omitempty"`
 	Categories []Category `json:"categories,omitempty"`
 	Roles      []string   `json:"roles,omitempty"`
-	Members    []User     `json:"members,omitempty"`
+	Members    []User     `json:"members"`
 	CreatedAt  string     `json:"created_at,omitempty"`
 }
 

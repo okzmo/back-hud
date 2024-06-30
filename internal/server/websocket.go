@@ -77,11 +77,7 @@ func (c *Websocket) OnMessage(socket *gws.Conn, message *gws.Message) {
 	}
 
 	obj := mess.Content.(map[string]any)
-
-	switch mess.Type {
-	case "participant_status":
-		Pub(globalEmitter, obj["serverId"].(string), gws.OpcodeText, message.Data.Bytes())
-	}
+	Pub(globalEmitter, obj["serverId"].(string), gws.OpcodeText, message.Data.Bytes())
 }
 
 // EMITTER

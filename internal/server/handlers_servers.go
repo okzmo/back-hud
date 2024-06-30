@@ -2,9 +2,10 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"goback/internal/models"
+	"goback/internal/utils"
+	"goback/proto/protoMess"
 	"log"
 	"net/http"
 	"strings"
@@ -13,11 +14,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/livekit/protocol/livekit"
 	"github.com/lxzan/gws"
+	"google.golang.org/protobuf/proto"
 )
 
 type JoinServerBody struct {
-	UserId   string `json:"user_id"`
-	InviteId string `json:"invite_id"`
+	User     models.User `json:"user"`
+	InviteId string      `json:"invite_id"`
 }
 
 type CreateServerBody struct {
@@ -139,19 +141,44 @@ func (s *Server) HandlerJoinServer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	server, err := s.db.JoinServer(body.UserId, body.InviteId)
+	server, err := s.db.JoinServer(body.User.ID, body.InviteId)
 	if err != nil {
 		resp["name"] = "unexpected"
 		resp["message"] = err.Error()
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	if conn, ok := s.ws.sessions.Load(strings.Split(body.UserId, ":")[1]); ok {
+	if conn, ok := s.ws.sessions.Load(strings.Split(body.User.ID, ":")[1]); ok {
 		for _, channel := range server.ServerChannels {
 			Sub(globalEmitter, channel, &Socket{conn})
 		}
 		Sub(globalEmitter, server.Server.ID, &Socket{conn})
 	}
+
+	wsMess := &protoMess.WSMessage{
+		Type: "join_server",
+		Content: &protoMess.WSMessage_JoinServer{
+			JoinServer: &protoMess.JoinServer{
+				User: &protoMess.User{
+					Id:            body.User.ID,
+					Username:      body.User.Username,
+					DisplayName:   body.User.DisplayName,
+					UsernameColor: body.User.UsernameColor,
+					Avatar:        body.User.Avatar,
+				},
+				ServerId: server.Server.ID,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, server.Server.ID, gws.OpcodeBinary, compMess)
 
 	resp["server"] = server.Server
 
@@ -210,16 +237,21 @@ func (s *Server) HandlerDeleteServer(c echo.Context) error {
 
 	resp["success"] = true
 
-	wsMess := models.WSMessage{
-		Type:    "delete_server",
-		Content: body.ServerId,
+	wsMess := &protoMess.WSMessage{
+		Type: "delete_server",
+		Content: &protoMess.WSMessage_ServerId{
+			ServerId: body.ServerId,
+		},
 	}
-	data, err := json.Marshal(wsMess)
+
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	Pub(globalEmitter, body.ServerId, gws.OpcodeText, data)
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -244,6 +276,25 @@ func (s *Server) HandlerLeaveServer(c echo.Context) error {
 	}
 
 	resp["success"] = true
+
+	wsMess := &protoMess.WSMessage{
+		Type: "leave_server",
+		Content: &protoMess.WSMessage_QuitServer{
+			QuitServer: &protoMess.QuitServer{
+				ServerId: body.ServerId,
+				UserId:   body.UserId,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+	Pub(globalEmitter, body.ServerId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }

@@ -25,7 +25,7 @@ type Service interface {
 	GetUsersFromChannel(channelId string) ([]string, error)
 	GetUserServers(userId string) ([]models.Server, error)
 	GetServer(userId, serverId string) (models.Server, error)
-	GetPrivateMessages(userId, channelId string) (PrivateMessages, error)
+	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
 	GetChannelMessages(channelId string) ([]models.Message, error)
 	CreateMessage(message models.Message) (models.Message, error)
 	RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error)
@@ -304,9 +304,9 @@ type PrivateMessages struct {
 	Members  []models.User    `json:"members"`
 }
 
-func (s *service) GetPrivateMessages(userId, channelId string) (PrivateMessages, error) {
+func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message, error) {
 	res, err := s.db.Query(`
-      SELECT author.id, channel_id, content, id, edited, images, mentions, updated_at, created_at
+      SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, id, edited, images, mentions, updated_at, created_at
       FROM messages 
       WHERE (channel_id = $channelId AND author = $userId) OR (channel_id = $userId2 AND author = $channelId2) ORDER BY created_at ASC FETCH author;
     `, map[string]string{
@@ -317,40 +317,20 @@ func (s *service) GetPrivateMessages(userId, channelId string) (PrivateMessages,
 	})
 	if err != nil {
 		log.Println(err)
-		return PrivateMessages{}, err
+		return nil, err
 	}
 
 	messages, err := surrealdb.SmartUnmarshal[[]models.Message](res, err)
 	if err != nil {
 		log.Println(err)
-		return PrivateMessages{}, err
+		return nil, err
 	}
 
-	res, err = s.db.Query(`SELECT * FROM [$userId, $userId2]`, map[string]string{
-		"userId":  userId,
-		"userId2": "users:" + channelId,
-	})
-	if err != nil {
-		log.Println(err)
-		return PrivateMessages{}, err
-	}
-
-	members, err := surrealdb.SmartUnmarshal[[]models.User](res, err)
-	if err != nil {
-		log.Println(err)
-		return PrivateMessages{}, err
-	}
-
-	privateMessages := PrivateMessages{
-		Messages: messages,
-		Members:  members,
-	}
-
-	return privateMessages, nil
+	return messages, nil
 }
 
 func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, channel_id, content, images, mentions, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at, created_at FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author;`, map[string]string{
 		"channelId": "channels:" + channelId,
 	})
 	if err != nil {
@@ -400,7 +380,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	messageRes, err := s.db.Query(`
-    SELECT author.id, channel_id, content, images, mentions, id, edited, updated_at FROM ONLY $id FETCH author;
+    SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at FROM ONLY $id FETCH author;
     `, map[string]any{
 		"id": id.ID,
 	})

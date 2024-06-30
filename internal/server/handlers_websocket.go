@@ -5,6 +5,7 @@ import (
 	"goback/proto/protoMess"
 	"log"
 	"math/rand"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/lxzan/gws"
@@ -38,6 +39,10 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 	if err != nil {
 		log.Println(err)
 	}
+	friends, err := s.db.GetFriends("users:" + userIdMain)
+	if err != nil {
+		log.Println(err)
+	}
 	channels, err := s.db.GetSubscribedChannels(userIdMain)
 	if err != nil {
 		log.Println(err)
@@ -61,9 +66,16 @@ func (s *Server) HandlerWebsocket(c echo.Context) error {
 
 	compMess := utils.CompressMess(data)
 	for _, server := range servers {
-		Sub(globalEmitter, server.ID, socket)
 		Pub(globalEmitter, server.ID, gws.OpcodeBinary, compMess)
+		Sub(globalEmitter, server.ID, socket)
 	}
+
+	for _, f := range friends {
+		if connFriend, ok := s.ws.sessions.Load(strings.Split(f.ID, ":")[1]); ok {
+			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
+		}
+	}
+
 	for _, channel := range channels {
 		Sub(globalEmitter, channel.ID, socket)
 	}

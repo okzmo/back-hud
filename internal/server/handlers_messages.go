@@ -41,7 +41,7 @@ func (s *Server) HandlerPrivateMessages(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
-	resp["result"] = messages
+	resp["messages"] = messages
 
 	return c.JSON(http.StatusOK, resp)
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"goback/internal/models"
 	"goback/internal/utils"
 	"goback/proto/protoMess"
 	"io"
@@ -412,28 +411,30 @@ func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 
 	resp["avatar"] = avatar
 
-	content := ChangeAvatar{
-		UserId: userId,
-		Avatar: avatar,
+	wsMess := &protoMess.WSMessage{
+		Type: "new_avatar",
+		Content: &protoMess.WSMessage_ChangeAvatar{
+			ChangeAvatar: &protoMess.ChangeAvatar{
+				UserId: userId,
+				Avatar: avatar,
+			},
+		},
 	}
-	wsMess := models.WSMessage{
-		Type:    "new_avatar",
-		Content: content,
-	}
-	data, err := json.Marshal(wsMess)
+	data, err := proto.Marshal(wsMess)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
+	compMess := utils.CompressMess(data)
 	if serverId != "" {
-		Pub(globalEmitter, serverId, gws.OpcodeText, data)
+		Pub(globalEmitter, serverId, gws.OpcodeBinary, compMess)
 	}
 
 	if len(friends) > 0 {
 		for _, friend := range friends {
 			if connFriend, ok := s.ws.sessions.Load(strings.Split(friend, ":")[1]); ok {
-				connFriend.WriteMessage(gws.OpcodeText, data)
+				connFriend.WriteMessage(gws.OpcodeBinary, compMess)
 			}
 		}
 	}

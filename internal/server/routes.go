@@ -55,6 +55,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.GET("/channels/:channelId/users", s.HandlerUsersIdFromChannel)
 	api.POST("/channels/create", s.HandlerCreateChannel)
 	api.POST("/channels/delete", s.HandlerDeleteChannel)
+	api.POST("/channels/typing", s.HandlerTyping)
 
 	api.POST("/category/create", s.HandlerCreateCategory)
 	api.POST("/category/delete", s.HandlerDeleteCategory)

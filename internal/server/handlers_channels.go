@@ -32,6 +32,13 @@ type categoryBody struct {
 	ServerId     string `json:"server_id"`
 }
 
+type typingBody struct {
+	DisplayName string `json:"display_name"`
+	UserId      string `json:"user_id"`
+	ChannelId   string `json:"channel_id"`
+	Status      string `json:"status"`
+}
+
 func (s *Server) HandlerCreateChannel(c echo.Context) error {
 	resp := make(map[string]any)
 
@@ -70,6 +77,7 @@ func (s *Server) HandlerCreateChannel(c echo.Context) error {
 		Type: "create_channel",
 		Content: &protoMess.WSMessage_Channel{
 			Channel: &protoMess.CreateChannel{
+				ServerId:     body.ServerId,
 				Channel:      channelObj,
 				CategoryName: body.CategoryName,
 			},
@@ -116,6 +124,7 @@ func (s *Server) HandlerDeleteChannel(c echo.Context) error {
 		Type: "delete_channel",
 		Content: &protoMess.WSMessage_Delchannel{
 			Delchannel: &protoMess.DeleteChannel{
+				ServerId:     body.ServerId,
 				ChannelId:    body.ChannelId,
 				CategoryName: body.CategoryName,
 			},
@@ -156,8 +165,11 @@ func (s *Server) HandlerCreateCategory(c echo.Context) error {
 
 	wsMess := &protoMess.WSMessage{
 		Type: "create_category",
-		Content: &protoMess.WSMessage_CategoryName{
-			CategoryName: body.CategoryName,
+		Content: &protoMess.WSMessage_CreateCategory{
+			CreateCategory: &protoMess.CreateCategory{
+				ServerId:     body.ServerId,
+				CategoryName: body.CategoryName,
+			},
 		},
 	}
 
@@ -195,8 +207,11 @@ func (s *Server) HandlerDeleteCategory(c echo.Context) error {
 
 	wsMess := &protoMess.WSMessage{
 		Type: "delete_category",
-		Content: &protoMess.WSMessage_CategoryName{
-			CategoryName: body.CategoryName,
+		Content: &protoMess.WSMessage_DeleteCategory{
+			DeleteCategory: &protoMess.DeleteCategory{
+				ServerId:     body.ServerId,
+				CategoryName: body.CategoryName,
+			},
 		},
 	}
 
@@ -217,5 +232,48 @@ func (s *Server) HandlerDeleteCategory(c echo.Context) error {
 			Room: v.Name,
 		})
 	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerTyping(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(typingBody)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when joining the server."
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	resp["message"] = "success"
+
+	wsMess := &protoMess.WSMessage{
+		Type: "typing",
+		Content: &protoMess.WSMessage_Typing{
+			Typing: &protoMess.Typing{
+				UserId:      body.UserId,
+				DisplayName: body.DisplayName,
+				ChannelId:   body.ChannelId,
+				Status:      body.Status,
+			},
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+
+	if connFriend, ok := s.ws.sessions.Load(body.ChannelId); ok {
+		connFriend.WriteMessage(gws.OpcodeBinary, compMess)
+	} else {
+		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
+	}
+
 	return c.JSON(http.StatusOK, resp)
 }

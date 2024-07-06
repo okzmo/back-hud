@@ -54,7 +54,7 @@ message WSMessage {
   string type = 1;
   oneof content {
     Message mess = 2;
-    string category_name = 3;
+    CreateCategory create_category = 3;
     string user_id = 4;
     string server_id = 5;
     CreateChannel channel = 6;
@@ -65,17 +65,32 @@ message WSMessage {
     JoinServer join_server = 11;
     QuitServer quit_server = 12;
     ParticipantMove participant_move = 13;
+    DeleteCategory delete_category = 14;
+    ChangeAvatar change_avatar = 15;
+    Typing typing = 16;
   }
-  MessageNotif notification = 14;
+  MessageNotif notification = 17;
 }
 
 message CreateChannel {
-  Channel channel = 1;
-  string category_name = 2;
+  string server_id = 1;
+  Channel channel = 2;
+  string category_name = 3;
 }
 
 message DeleteChannel {
-  string channel_id = 1;
+  string server_id = 1;
+  string channel_id = 2;
+  string category_name = 3;
+}
+
+message CreateCategory {
+  string server_id = 1;
+  string category_name = 2;
+}
+
+message DeleteCategory {
+  string server_id = 1;
   string category_name = 2;
 }
 
@@ -110,4 +125,16 @@ message Channel {
   bool private = 4;
   string created_at = 5;
   repeated User participants = 6;
+}
+
+message ChangeAvatar {
+  string user_id = 1;
+  string avatar = 2;
+}
+
+message Typing {
+  string display_name = 1;
+  string channel_id = 2;
+  string user_id = 3;
+  string status = 4;
 }

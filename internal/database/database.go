@@ -44,6 +44,8 @@ type Service interface {
 	RemoveCategory(serverId, name string) ([]string, error)
 	CreateInvitation(userId, serverId string) (string, error)
 	CreateMessageNotification(message models.Message) (models.MessageNotif, error)
+	CreateMessageNotifications(channelId, serverId, authorId string, mentions []string) ([]string, error)
+	UpdateMessageNotifications(userId string, channels []string) error
 	ChangeEmail(userId, email string) error
 	ChangeUsername(userId, username string) error
 	ChangeDisplayName(userId, displayName string) error
@@ -397,6 +399,68 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	return messageCreated, nil
 }
 
+func (s *service) CreateMessageNotifications(channelId, serverId, authorId string, mentions []string) ([]string, error) {
+	createRes, err := s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $users = SELECT VALUE <-subscribed.in FROM ONLY $channelId;
+      FOR $user IN $users {
+        IF $user != $authorId
+          {
+            LET $existingNotif = (SELECT id FROM notifications WHERE user_id=$user AND channel_id=$channelId);
+            IF $existingNotif {
+              UPDATE $existingNotif.id MERGE { 
+                  mentions: $mentions,
+                  read: false,
+              };
+            } ELSE {
+              CREATE ONLY notifications CONTENT {
+                channel_id: $channelId,
+                created_at: time::now(),
+                mentions: $mentions,
+                server_id: $serverId,
+                type: 'new_message',
+                user_id: $user,
+                read: false
+              };
+            }
+          }
+        ;
+      };
+      RETURN $users;
+      COMMIT TRANSACTION;
+    `, map[string]any{
+		"mentions":  mentions,
+		"channelId": "channels:" + channelId,
+		"serverId":  serverId,
+		"authorId":  authorId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := surrealdb.SmartUnmarshal[[]string](createRes, err)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func (s *service) UpdateMessageNotifications(userId string, channels []string) error {
+	_, err := s.db.Query(`
+      UPDATE notifications SET read = true WHERE channel_id IN $channels AND user_id=$userId;
+    `, map[string]any{
+		"channels": channels,
+		"userId":   userId,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *service) CreateMessageNotification(message models.Message) (models.MessageNotif, error) {
 	createRes, err := s.db.Query(`
       BEGIN TRANSACTION;
@@ -585,6 +649,7 @@ func (s *service) GetNotifications(userId string) (interface{}, error) {
 		log.Println(err)
 		return models.FriendRequest{}, err
 	}
+	log.Println(notifs)
 
 	return notifs, err
 }

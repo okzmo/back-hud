@@ -61,6 +61,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/category/delete", s.HandlerDeleteCategory)
 
 	api.GET("/notifications/:userId", s.HandlerNotifications)
+	api.POST("/notifications/message_update", s.HandlerUpdateNotifications)
 
 	api.POST("/invites/create", s.HandlerCreateInvitation)
 

@@ -19,4 +19,5 @@ type MessageNotif struct {
 	Counter   int      `json:"counter"`
 	Mentions  []string `json:"mentions,omitempty"`
 	CreatedAt string   `json:"created_at"`
+	Read      bool     `json:"read"`
 }

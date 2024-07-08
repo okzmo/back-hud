@@ -38,6 +38,7 @@ message MessageNotif {
   int32 counter = 6;
   repeated string mentions = 7;
   string created_at = 8;
+  bool read = 9;
 }
 
 message FriendRequest {
@@ -68,8 +69,8 @@ message WSMessage {
     DeleteCategory delete_category = 14;
     ChangeAvatar change_avatar = 15;
     Typing typing = 16;
+    MessageNotif notification = 17;
   }
-  MessageNotif notification = 17;
 }
 
 message CreateChannel {

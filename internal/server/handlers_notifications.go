@@ -35,7 +35,6 @@ func (s *Server) HandlerUpdateNotifications(c echo.Context) error {
 		log.Println(err)
 		return err
 	}
-	log.Println(body.Channels, body.UserId)
 
 	err := s.db.UpdateMessageNotifications(body.UserId, body.Channels)
 	if err != nil {

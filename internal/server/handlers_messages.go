@@ -140,15 +140,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	go s.SendMessageNotifications(body.PrivateMessage, body.Author.ID, body.ChannelId, body.ServerId, body.Mentions)
 
 	if body.PrivateMessage {
-		// id, _ := utils.GenerateRandomId(10)
-		// notif := &protoMess.MessageNotif{
-		// 	Id:        id,
-		// 	Type:      "new_message",
-		// 	UserId:    "users:" + body.ChannelId,
-		// 	ChannelId: "users:" + strings.Split(body.Author.ID, ":")[1],
-		// 	Counter:   1,
-		// }
-
 		authorObj := &protoMess.User{
 			Id:            mess.Author.ID,
 			DisplayName:   mess.Author.DisplayName,
@@ -171,7 +162,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Content: &protoMess.WSMessage_Mess{
 				Mess: messObj,
 			},
-			// Notification: notif,
 		}
 		data, err := proto.Marshal(wsMess)
 		if err != nil {
@@ -189,16 +179,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
 		}
 	} else {
-		// id, _ := utils.GenerateRandomId(10)
-		// notif := &protoMess.MessageNotif{
-		// 	Id:        id,
-		// 	Type:      "new_message",
-		// 	UserId:    body.Author.ID,
-		// 	ChannelId: "channels:" + body.ChannelId,
-		// 	ServerId:  body.ServerId,
-		// 	Mentions:  body.Mentions,
-		// }
-
 		authorObj := &protoMess.User{
 			Id:            mess.Author.ID,
 			DisplayName:   mess.Author.DisplayName,
@@ -239,16 +219,22 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 
 func (s *Server) SendMessageNotifications(privateMessage bool, authorId, channelId, serverId string, mentions []string) {
 	if privateMessage {
-		id, _ := utils.GenerateRandomId(10)
+		notif, err := s.db.CreateMessageNotification("users:"+channelId, "users:"+strings.Split(authorId, ":")[1])
+		if err != nil {
+			log.Println(err)
+		}
+		log.Println(notif.Counter)
+
 		wsMess := &protoMess.WSMessage{
 			Type: "new_notification",
 			Content: &protoMess.WSMessage_Notification{
 				Notification: &protoMess.MessageNotif{
-					Id:        id,
+					Id:        notif.ID,
 					Type:      "new_message",
-					UserId:    "users:" + channelId,
-					ChannelId: "users:" + strings.Split(authorId, ":")[1],
-					Counter:   1,
+					UserId:    notif.UserId,
+					ChannelId: notif.ChannelId,
+					Counter:   int32(notif.Counter),
+					Read:      false,
 				},
 			},
 		}

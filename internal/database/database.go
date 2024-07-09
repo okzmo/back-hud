@@ -43,7 +43,7 @@ type Service interface {
 	CreateCategory(serverId, name string) error
 	RemoveCategory(serverId, name string) ([]string, error)
 	CreateInvitation(userId, serverId string) (string, error)
-	CreateMessageNotification(message models.Message) (models.MessageNotif, error)
+	CreateMessageNotification(userId, channelId string) (models.MessageNotif, error)
 	CreateMessageNotifications(channelId, serverId, authorId string, mentions []string) ([]string, error)
 	UpdateMessageNotifications(userId string, channels []string) error
 	ChangeEmail(userId, email string) error
@@ -328,6 +328,17 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 		return nil, err
 	}
 
+	_, err = s.db.Query(`
+     UPDATE notifications SET read = true WHERE user_id=$userId AND channel_id=$channelId;
+    `, map[string]string{
+		"userId":    userId,
+		"channelId": "users:" + channelId,
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
 	return messages, nil
 }
 
@@ -461,16 +472,14 @@ func (s *service) UpdateMessageNotifications(userId string, channels []string) e
 	return nil
 }
 
-func (s *service) CreateMessageNotification(message models.Message) (models.MessageNotif, error) {
+func (s *service) CreateMessageNotification(userId, channelId string) (models.MessageNotif, error) {
 	createRes, err := s.db.Query(`
       BEGIN TRANSACTION;
       LET $existingNotif = (SELECT * FROM notifications WHERE channel_id = $channelId LIMIT 1);
       LET $result = IF $existingNotif {
-          LET $update = UPDATE ONLY $existingNotif SET counter = IF counter < 9 THEN
-            counter + 1
-          ELSE
-            counter
-          END;
+          LET $update = UPDATE ONLY $existingNotif 
+          SET counter = IF read == true THEN 1 ELSE IF counter < 10 THEN counter + 1 ELSE counter END,
+          read = false;
               $update;
       } ELSE { 
           LET $create = CREATE ONLY notifications CONTENT {
@@ -478,15 +487,16 @@ func (s *service) CreateMessageNotification(message models.Message) (models.Mess
             counter: 1,
             created_at: time::now(),
             type: 'new_message',
-            user_id: $userId
+            user_id: $userId,
+            read: false,
           };
           $create;
       };
       RETURN $result;
       COMMIT TRANSACTION;
     `, map[string]any{
-		"userId":    strings.Split(message.ChannelId, ":")[1],
-		"channelId": message.Author.ID,
+		"userId":    userId,
+		"channelId": channelId,
 	})
 	if err != nil {
 		return models.MessageNotif{}, err

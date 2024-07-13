@@ -29,6 +29,22 @@ type CreateMessage struct {
 	Mentions       []string    `json:"mentions,omitempty"`
 }
 
+type EditMessage struct {
+	ChannelId      string   `json:"channel_id"`
+	Content        string   `json:"content"`
+	MessageId      string   `json:"message_id,omitempty"`
+	AuthorId       string   `json:"author_id"`
+	Mentions       []string `json:"mentions,omitempty"`
+	PrivateMessage bool     `json:"private_message"`
+}
+
+type DeleteMessage struct {
+	MessageId      string `json:"message_id,omitempty"`
+	ChannelId      string `json:"channel_id"`
+	AuthorId       string `json:"author_id"`
+	PrivateMessage bool   `json:"private_message"`
+}
+
 func (s *Server) HandlerPrivateMessages(c echo.Context) error {
 	resp := make(map[string]any)
 
@@ -69,7 +85,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	bodyStr := c.FormValue("body")
 	if err := json.Unmarshal([]byte(bodyStr), body); err != nil {
 		log.Println("Error parsing JSON body:", err)
-		resp["message"] = "An error occurred when parsing your message."
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
@@ -85,7 +100,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	form, err := c.MultipartForm()
 	if err != nil {
 		log.Println("Error parsing form data:", err)
-		resp["message"] = "An error occurred when parsing your files."
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
@@ -132,7 +146,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 	mess, err := s.db.CreateMessage(message)
 	if err != nil {
 		log.Println("error when creating a message", err)
-		resp["message"] = "An error occured when sending your message."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -155,6 +168,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Images:    mess.Images,
 			Mentions:  mess.Mentions,
 			UpdatedAt: mess.UpdatedAt,
+			CreatedAt: mess.CreatedAt,
 		}
 
 		wsMess := &protoMess.WSMessage{
@@ -194,6 +208,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Images:    mess.Images,
 			Mentions:  mess.Mentions,
 			UpdatedAt: mess.UpdatedAt,
+			CreatedAt: mess.CreatedAt,
 		}
 
 		wsMess := &protoMess.WSMessage{
@@ -201,7 +216,6 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 			Content: &protoMess.WSMessage_Mess{
 				Mess: messObj,
 			},
-			// Notification: notif,
 		}
 
 		data, err := proto.Marshal(wsMess)
@@ -214,7 +228,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 	}
 
-	return c.JSON(http.StatusOK, resp)
+	return nil
 }
 
 func (s *Server) SendMessageNotifications(privateMessage bool, authorId, channelId, serverId string, mentions []string) {
@@ -223,7 +237,6 @@ func (s *Server) SendMessageNotifications(privateMessage bool, authorId, channel
 		if err != nil {
 			log.Println(err)
 		}
-		log.Println(notif.Counter)
 
 		wsMess := &protoMess.WSMessage{
 			Type: "new_notification",
@@ -286,4 +299,144 @@ func (s *Server) SendMessageNotifications(privateMessage bool, authorId, channel
 			}
 		}
 	}
+}
+
+func (s *Server) HandlerEditMessage(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(EditMessage)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	err := s.db.EditMessage(body.MessageId, body.Content, body.Mentions)
+	if err != nil {
+		log.Println("error when editing a message", err)
+
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	if body.PrivateMessage {
+		author := &protoMess.User{
+			Id: body.AuthorId,
+		}
+
+		messObj := &protoMess.Message{
+			Id:        body.MessageId,
+			ChannelId: body.ChannelId,
+			Content:   body.Content,
+			Mentions:  body.Mentions,
+			Edited:    true,
+			Author:    author,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "edit_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+		}
+		data, err := proto.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		compMess := utils.CompressMess(data)
+		if connFriend, ok := s.ws.sessions.Load(body.ChannelId); ok {
+			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
+		}
+	} else {
+		messObj := &protoMess.Message{
+			Id:        body.MessageId,
+			ChannelId: body.ChannelId,
+			Content:   body.Content,
+			Mentions:  body.Mentions,
+			Edited:    true,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "edit_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+		}
+		data, err := proto.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		compMess := utils.CompressMess(data)
+		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerDeleteMessage(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(DeleteMessage)
+	if err := c.Bind(body); err != nil {
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	err := s.db.DeleteMessage(body.MessageId)
+	if err != nil {
+		log.Println("error when deleting a message", err)
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	if body.PrivateMessage {
+		author := &protoMess.User{
+			Id: body.AuthorId,
+		}
+
+		messObj := &protoMess.Message{
+			Id:        body.MessageId,
+			ChannelId: body.ChannelId,
+			Author:    author,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "delete_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+		}
+		data, err := proto.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		compMess := utils.CompressMess(data)
+		if connFriend, ok := s.ws.sessions.Load(body.ChannelId); ok {
+			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
+		}
+	} else {
+		messObj := &protoMess.Message{
+			Id:        body.MessageId,
+			ChannelId: body.ChannelId,
+		}
+
+		wsMess := &protoMess.WSMessage{
+			Type: "delete_message",
+			Content: &protoMess.WSMessage_Mess{
+				Mess: messObj,
+			},
+		}
+		data, err := proto.Marshal(wsMess)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		compMess := utils.CompressMess(data)
+		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }

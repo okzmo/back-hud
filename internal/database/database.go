@@ -28,6 +28,8 @@ type Service interface {
 	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
 	GetChannelMessages(channelId string) ([]models.Message, error)
 	CreateMessage(message models.Message) (models.Message, error)
+	EditMessage(messageId, content string, mentions []string) error
+	DeleteMessage(messageId string) error
 	RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error)
 	AcceptFriend(requestId, notifId string) ([]models.User, error)
 	RefuseFriend(requestId, notifId string) error
@@ -393,7 +395,7 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	messageRes, err := s.db.Query(`
-    SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at FROM ONLY $id FETCH author;
+    SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at, created_at FROM ONLY $id FETCH author;
     `, map[string]any{
 		"id": id.ID,
 	})
@@ -408,6 +410,39 @@ func (s *service) CreateMessage(message models.Message) (models.Message, error) 
 	}
 
 	return messageCreated, nil
+}
+
+func (s *service) EditMessage(messageId, content string, mentions []string) error {
+	_, err := s.db.Query(`
+      UPDATE $messageId MERGE {
+          content: $content,
+          edited: true,
+          mentions: $mentions,
+          updated_at: time::now()
+      }
+    `, map[string]any{
+		"messageId": messageId,
+		"mentions":  mentions,
+		"content":   content,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) DeleteMessage(messageId string) error {
+	_, err := s.db.Query(`
+      DELETE $messageId;
+    `, map[string]any{
+		"messageId": messageId,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *service) CreateMessageNotifications(channelId, serverId, authorId string, mentions []string) ([]string, error) {

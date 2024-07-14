@@ -26,6 +26,7 @@ type CreateMessage struct {
 	Content        string      `json:"content"`
 	PrivateMessage bool        `json:"private_message"`
 	ServerId       string      `json:"server_id,omitempty"`
+	Reply          string      `json:"reply,omitempty"`
 	Mentions       []string    `json:"mentions,omitempty"`
 }
 
@@ -92,6 +93,7 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 		Author:    body.Author,
 		ChannelId: body.ChannelId,
 		Content:   body.Content,
+		Reply:     models.Reply{ID: body.Reply},
 		Edited:    false,
 		Images:    make([]string, 0),
 		Mentions:  make([]string, 0),
@@ -152,79 +154,56 @@ func (s *Server) HandlerSendMessage(c echo.Context) error {
 
 	go s.SendMessageNotifications(body.PrivateMessage, body.Author.ID, body.ChannelId, body.ServerId, body.Mentions)
 
-	if body.PrivateMessage {
-		authorObj := &protoMess.User{
-			Id:            mess.Author.ID,
-			DisplayName:   mess.Author.DisplayName,
-			Avatar:        mess.Author.Avatar,
-			UsernameColor: mess.Author.UsernameColor,
-		}
+	authorObj := &protoMess.User{
+		Id:            mess.Author.ID,
+		DisplayName:   mess.Author.DisplayName,
+		Avatar:        mess.Author.Avatar,
+		UsernameColor: mess.Author.UsernameColor,
+	}
 
-		messObj := &protoMess.Message{
-			Id:        mess.ID,
-			Author:    authorObj,
-			ChannelId: mess.ChannelId,
-			Content:   mess.Content,
-			Images:    mess.Images,
-			Mentions:  mess.Mentions,
-			UpdatedAt: mess.UpdatedAt,
-			CreatedAt: mess.CreatedAt,
-		}
-
-		wsMess := &protoMess.WSMessage{
-			Type: "text_message",
-			Content: &protoMess.WSMessage_Mess{
-				Mess: messObj,
+	messObj := &protoMess.Message{
+		Id:        mess.ID,
+		Author:    authorObj,
+		ChannelId: mess.ChannelId,
+		Content:   mess.Content,
+		Images:    mess.Images,
+		Mentions:  mess.Mentions,
+		UpdatedAt: mess.UpdatedAt,
+		CreatedAt: mess.CreatedAt,
+	}
+	if mess.Reply.ID != "" {
+		messObj.Replies = &protoMess.Reply{
+			Id: mess.Reply.ID,
+			Author: &protoMess.User{
+				DisplayName: mess.Reply.Author.DisplayName,
 			},
+			Content: mess.Reply.Content,
 		}
-		data, err := proto.Marshal(wsMess)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
+	}
 
-		compMess := utils.CompressMess(data)
+	wsMess := &protoMess.WSMessage{
+		Type: "text_message",
+		Content: &protoMess.WSMessage_Mess{
+			Mess: messObj,
+		},
+	}
+
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+
+	if body.PrivateMessage {
 		if conn, ok := s.ws.sessions.Load(strings.Split(body.Author.ID, ":")[1]); ok {
 			conn.WriteMessage(gws.OpcodeBinary, compMess)
 		}
-
-		connFriend, ok := s.ws.sessions.Load(body.ChannelId)
-		if ok {
+		if connFriend, ok := s.ws.sessions.Load(body.ChannelId); ok {
 			connFriend.WriteMessage(gws.OpcodeBinary, compMess)
 		}
 	} else {
-		authorObj := &protoMess.User{
-			Id:            mess.Author.ID,
-			DisplayName:   mess.Author.DisplayName,
-			Avatar:        mess.Author.Avatar,
-			UsernameColor: mess.Author.UsernameColor,
-		}
-
-		messObj := &protoMess.Message{
-			Id:        mess.ID,
-			Author:    authorObj,
-			ChannelId: mess.ChannelId,
-			Content:   mess.Content,
-			Images:    mess.Images,
-			Mentions:  mess.Mentions,
-			UpdatedAt: mess.UpdatedAt,
-			CreatedAt: mess.CreatedAt,
-		}
-
-		wsMess := &protoMess.WSMessage{
-			Type: "text_message",
-			Content: &protoMess.WSMessage_Mess{
-				Mess: messObj,
-			},
-		}
-
-		data, err := proto.Marshal(wsMess)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
-
-		compMess := utils.CompressMess(data)
 		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 	}
 

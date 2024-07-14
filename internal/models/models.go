@@ -56,8 +56,15 @@ type Message struct {
 	Edited    bool     `json:"edited"`
 	Images    []string `json:"images,omitempty"`
 	Mentions  []string `json:"mentions,omitempty"`
+	Reply     Reply    `json:"replies,omitempty"`
 	UpdatedAt string   `json:"updated_at,omitempty"`
 	CreatedAt string   `json:"created_at,omitempty"`
+}
+
+type Reply struct {
+	ID      string `json:"id"`
+	Author  *User  `json:"author"`
+	Content string `json:"content"`
 }
 
 type WSMessage struct {

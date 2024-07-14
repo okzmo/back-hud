@@ -25,8 +25,15 @@ message Message {
   bool edited = 5;
   repeated string images = 6;
   repeated string mentions = 7;
-  string updated_at = 8;
-  string created_at = 9;
+  Reply replies = 8;
+  string updated_at = 9;
+  string created_at = 10;
+}
+
+message Reply {
+  string id = 1;
+  User author = 2;
+  string content = 3;
 }
 
 message MessageNotif {

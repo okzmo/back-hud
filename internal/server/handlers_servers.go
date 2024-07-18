@@ -1,16 +1,23 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"goback/internal/models"
 	"goback/internal/utils"
 	"goback/proto/protoMess"
+	"io"
 	"log"
 	"net/http"
+	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/h2non/bimg"
 	"github.com/labstack/echo/v4"
 	"github.com/livekit/protocol/livekit"
 	"github.com/lxzan/gws"
@@ -319,6 +326,152 @@ func (s *Server) HandlerCreateInvitation(c echo.Context) error {
 	}
 
 	resp["id"] = invitationId
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerChangeServerIcon(c echo.Context) error {
+	resp := make(map[string]any)
+
+	body := new(ChangeInformations)
+	if err := c.Bind(body); err != nil {
+		log.Println(err)
+		resp["message"] = "An error occured when changing your avatar."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	cropX, _ := strconv.Atoi(c.FormValue("cropX"))
+	cropY, _ := strconv.Atoi(c.FormValue("cropY"))
+	cropWidth, _ := strconv.Atoi(c.FormValue("cropWidth"))
+	cropHeight, _ := strconv.Atoi(c.FormValue("cropHeight"))
+	oldIconName := c.FormValue("old_icon")
+	serverId := c.FormValue("server_id")
+
+	file, err := c.FormFile("icon")
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to get file")
+	}
+
+	if file.Size > 8*1024*1024 {
+		resp["message"] = "File size exceeds 8MB limit"
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to open file")
+	}
+	defer src.Close()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, src)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to read image")
+	}
+
+	imageBuffer := buf.Bytes()
+	mimeType := http.DetectContentType(imageBuffer)
+
+	var imageToUpload []byte
+	var iconKey string
+	randId, _ := utils.GenerateRandomId(6)
+	if mimeType == "image/gif" {
+		cmd := exec.Command("gifsicle",
+			"--crop", fmt.Sprintf("%d,%d+%dx%d", cropX, cropY, cropWidth, cropHeight),
+			"--lossy=90",
+			"--output", "-",
+			"--", "-",
+		)
+
+		cmd.Stdin = bytes.NewReader(imageBuffer)
+		var outputBuf bytes.Buffer
+		cmd.Stdout = &outputBuf
+
+		err = cmd.Run()
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop GIF with gifsicle")
+		}
+
+		imageToUpload = outputBuf.Bytes()
+		iconKey = strings.Split(serverId, ":")[1] + "-icon-" + randId + ".gif"
+	} else {
+		croppedImage, err := bimg.NewImage(imageBuffer).Extract(cropY, cropX, cropWidth, cropHeight)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop image")
+		}
+
+		imageToUpload, err = bimg.NewImage(croppedImage).Convert(bimg.JPEG)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to convert image to jpg")
+		}
+		iconKey = strings.Split(serverId, ":")[1] + "-icon-" + randId + ".jpg"
+	}
+
+	if oldIconName != "" {
+		go func() {
+			res, err := s.s3.GetObject(&s3.GetObjectInput{
+				Bucket: aws.String("Hudori"),
+				Key:    aws.String(oldIconName),
+			})
+			if err != nil {
+				log.Println(err)
+			}
+
+			_, err = s.s3.DeleteObject(&s3.DeleteObjectInput{
+				Bucket:    aws.String("Hudori"),
+				Key:       aws.String(oldIconName),
+				VersionId: res.VersionId,
+			})
+			if err != nil {
+				log.Println(err)
+			}
+		}()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err = s.s3.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(iconKey),
+			Body:   bytes.NewReader(imageToUpload),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	wg.Wait()
+
+	icon, err := s.db.UpdateServerIcon(serverId, iconKey)
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to update link")
+	}
+
+	resp["icon"] = icon
+
+	wsMess := &protoMess.WSMessage{
+		Type: "new_server_icon",
+		Content: &protoMess.WSMessage_ServerPic{
+			ServerPic: &protoMess.ChangeServerEl{
+				Id:      serverId,
+				Picture: icon,
+			},
+		},
+	}
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+	if serverId != "" {
+		Pub(globalEmitter, serverId, gws.OpcodeBinary, compMess)
+	}
 
 	return c.JSON(http.StatusOK, resp)
 }

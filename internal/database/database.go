@@ -54,6 +54,8 @@ type Service interface {
 	ChangeNameColor(userId, usernameColor string) error
 	UpdateBanner(userId, bannerLink string) (string, error)
 	UpdateAvatar(userId, avatarLink string) (string, error)
+	UpdateServerIcon(serverId, avatarLink string) (string, error)
+	UpdateServerBanner(serverId, bannerLink string) (string, error)
 	CheckInvitationValidity(InviteId string) (models.Invitation, error)
 	UpdateUserStatus(userId string, status string) error
 }
@@ -233,6 +235,7 @@ func (s *service) GetUserServers(userId string) ([]models.Server, error) {
         out.id AS id,
         out.name AS name,
         out.icon AS icon,
+        out.banner AS banner,
         out.created_at AS created_at
       FROM member WHERE in = $userId ORDER BY created_at ASC FETCH out;
     `, map[string]string{
@@ -1153,6 +1156,45 @@ func (s *service) UpdateAvatar(userId, avatarKey string) (string, error) {
 	}
 
 	return user.Avatar, nil
+}
+
+func (s *service) UpdateServerBanner(serverId, bannerKey string) (string, error) {
+	res, err := s.db.Query(`UPDATE ONLY $serverId SET banner=$bannerLink RETURN banner`, map[string]string{
+		"serverId":   serverId,
+		"bannerLink": "https://f003.backblazeb2.com/file/Hudori/" + bannerKey,
+	})
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while leaving the server")
+	}
+
+	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	return server.Banner, nil
+}
+
+func (s *service) UpdateServerIcon(serverId, iconKey string) (string, error) {
+	res, err := s.db.Query(`UPDATE ONLY $serverId SET icon=$iconLink RETURN icon`, map[string]string{
+		"serverId": serverId,
+		"iconLink": "https://f003.backblazeb2.com/file/Hudori/" + iconKey,
+	})
+	log.Println(res)
+	if err != nil {
+		log.Println(err)
+		return "", fmt.Errorf("an error occured while leaving the server")
+	}
+
+	server, err := surrealdb.SmartUnmarshal[models.Server](res, err)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	return server.Icon, nil
 }
 
 func (s *service) CheckInvitationValidity(invitationId string) (models.Invitation, error) {

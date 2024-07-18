@@ -77,6 +77,7 @@ message WSMessage {
     ChangeAvatar change_avatar = 15;
     Typing typing = 16;
     MessageNotif notification = 17;
+    ChangeServerEl server_pic = 18;
   }
 }
 
@@ -138,6 +139,11 @@ message Channel {
 message ChangeAvatar {
   string user_id = 1;
   string avatar = 2;
+}
+
+message ChangeServerEl {
+  string id = 1;
+  string picture = 2;
 }
 
 message Typing {

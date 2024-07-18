@@ -47,6 +47,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/server/create", s.HandlerCreateServer)
 	api.POST("/server/delete", s.HandlerDeleteServer)
 	api.POST("/server/leave", s.HandlerLeaveServer)
+	api.POST("/server/change_icon", s.HandlerChangeServerIcon)
 
 	api.GET("/messages/:channelId/private/:userId", s.HandlerPrivateMessages)
 	api.GET("/messages/:channelId", s.HandlerChannelMessages)

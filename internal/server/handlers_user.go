@@ -271,6 +271,7 @@ func (s *Server) HandlerChangeBanner(c echo.Context) error {
 
 	resp["banner"] = banner
 
+	resp["message"] = "success"
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -439,6 +440,7 @@ func (s *Server) HandlerChangeAvatar(c echo.Context) error {
 		}
 	}
 
+	resp["message"] = "success"
 	return c.JSON(http.StatusOK, resp)
 }
 

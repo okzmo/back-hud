@@ -26,7 +26,7 @@ type Service interface {
 	GetUserServers(userId string) ([]models.Server, error)
 	GetServer(userId, serverId string) (models.Server, error)
 	GetPrivateMessages(userId, channelId string) ([]models.Message, error)
-	GetChannelMessages(channelId string) ([]models.Message, error)
+	GetChannelMessages(channelId string, limit, before int) ([]models.Message, error)
 	CreateMessage(message models.Message) (models.Message, error)
 	EditMessage(messageId, content string, mentions []string) error
 	DeleteMessage(messageId string) error
@@ -347,9 +347,11 @@ func (s *service) GetPrivateMessages(userId, channelId string) ([]models.Message
 	return messages, nil
 }
 
-func (s *service) GetChannelMessages(channelId string) ([]models.Message, error) {
-	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at, created_at, replies.id, replies.content, replies.author.display_name FROM messages WHERE channel_id=$channelId ORDER BY created_at ASC FETCH author, replies;`, map[string]string{
+func (s *service) GetChannelMessages(channelId string, limit, before int) ([]models.Message, error) {
+	res, err := s.db.Query(`SELECT author.id, author.username, author.display_name, author.username_color, author.avatar, channel_id, content, images, mentions, id, edited, updated_at, created_at, replies.id, replies.content, replies.author.display_name FROM messages WHERE channel_id=$channelId ORDER BY created_at DESC LIMIT $limit START $before FETCH author, replies;`, map[string]interface{}{
 		"channelId": "channels:" + channelId,
+		"before":    before,
+		"limit":     limit,
 	})
 	if err != nil {
 		log.Println(err)

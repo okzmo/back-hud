@@ -46,14 +46,15 @@ func (s *Server) HandlerCreateChannel(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured when creating the channel."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
 	channelAndMembers, err := s.db.CreateChannel(body.ServerId, body.CategoryName, body.ChannelType, body.Name)
 	if err != nil {
-		resp["message"] = err
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when creating the channel."
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
@@ -103,14 +104,15 @@ func (s *Server) HandlerDeleteChannel(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured when deleting the channel."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
 	err := s.db.RemoveChannel(body.ServerId, body.CategoryName, body.ChannelId)
 	if err != nil {
-		resp["message"] = err
+		resp["name"] = "unexpected"
+		resp["message"] = "An error occured when deleting the channel."
 		return c.JSON(http.StatusNotFound, resp)
 	}
 
@@ -150,7 +152,7 @@ func (s *Server) HandlerCreateCategory(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured when creating the category."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -241,8 +243,7 @@ func (s *Server) HandlerTyping(c echo.Context) error {
 	body := new(typingBody)
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
-		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured on typing indicator."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}

@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -67,8 +68,10 @@ func (s *Server) HandlerChannelMessages(c echo.Context) error {
 	resp := make(map[string]any)
 
 	channelId := c.Param("channelId")
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	before, _ := strconv.Atoi(c.QueryParam("before"))
 
-	messages, err := s.db.GetChannelMessages(channelId)
+	messages, err := s.db.GetChannelMessages(channelId, limit, before)
 	if err != nil {
 		resp["message"] = err
 		return c.JSON(http.StatusNotFound, resp)
@@ -351,6 +354,7 @@ func (s *Server) HandlerEditMessage(c echo.Context) error {
 		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 	}
 
+	resp["message"] = "success"
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -417,5 +421,6 @@ func (s *Server) HandlerDeleteMessage(c echo.Context) error {
 		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 	}
 
+	resp["message"] = "success"
 	return c.JSON(http.StatusOK, resp)
 }

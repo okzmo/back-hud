@@ -693,7 +693,7 @@ func (s *service) RemoveFriend(userId, friendId string) error {
 }
 
 func (s *service) GetNotifications(userId string) (interface{}, error) {
-	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId ORDER BY created_at DESC", map[string]string{
+	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId AND read=false ORDER BY created_at DESC", map[string]string{
 		"userId": userId,
 	})
 	if err != nil {
@@ -1024,25 +1024,25 @@ func (s *service) RemoveCategory(serverId, categoryName string) ([]string, error
 	return channels, nil
 }
 
-type invitateId struct {
+type inviteId struct {
 	InviteId string `json:"invite_id"`
 }
 
 func (s *service) CreateInvitation(userId, serverId string) (string, error) {
-	var invitationId invitateId
+	var invitationId inviteId
 	res, err := s.db.Query(`SELECT invite_id FROM ONLY invites WHERE user_id=$userId AND server_id=$serverId LIMIT 1`, map[string]string{
 		"userId":   userId,
 		"serverId": serverId,
 	})
 	if err != nil {
 		log.Println(err)
-		return "", fmt.Errorf("an error occured while leaving the server")
+		return "", fmt.Errorf("no invitation found for this space")
 	}
 
-	invitationId, err = surrealdb.SmartUnmarshal[invitateId](res, err)
+	invitationId, err = surrealdb.SmartUnmarshal[inviteId](res, err)
 	if err != nil {
 		log.Println(err)
-		return "", fmt.Errorf("an error occured while deleting the server")
+		return "", fmt.Errorf("no invitation found for this space")
 	}
 
 	if len(invitationId.InviteId) > 0 {
@@ -1064,7 +1064,7 @@ func (s *service) CreateInvitation(userId, serverId string) (string, error) {
 	})
 	if err != nil {
 		log.Println(err)
-		return "", fmt.Errorf("an error occured while leaving the server")
+		return "", fmt.Errorf("an error occured while creating an invitation")
 	}
 
 	return id, nil

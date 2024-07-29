@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -143,12 +144,20 @@ func (s *Server) HandlerJoinServer(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured when joining the space."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	server, err := s.db.JoinServer(body.User.ID, body.InviteId)
+	re := regexp.MustCompile(`^(https://hudori\.app/)?([a-zA-Z0-9]{8})$`)
+	match := re.FindStringSubmatch(body.InviteId)
+	if match == nil {
+		resp["name"] = "unexpected"
+		resp["message"] = "The invite link is not valid."
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	server, err := s.db.JoinServer(body.User.ID, match[2])
 	if err != nil {
 		resp["name"] = "unexpected"
 		resp["message"] = err.Error()
@@ -199,9 +208,14 @@ func (s *Server) HandlerCreateServer(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when joining the server."
+		resp["message"] = "An error occured when joining the space."
 
 		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	if len(body.Name) > 16 {
+		resp["name"] = "unexpected"
+		resp["message"] = "The name of your space is too long."
 	}
 
 	server, err := s.db.CreateServer(body.UserId, body.Name)
@@ -230,7 +244,7 @@ func (s *Server) HandlerDeleteServer(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when deleting the server."
+		resp["message"] = "An error occured when deleting the space."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -270,7 +284,7 @@ func (s *Server) HandlerLeaveServer(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when leaving the server."
+		resp["message"] = "An error occured when leaving the space."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -313,7 +327,7 @@ func (s *Server) HandlerCreateInvitation(c echo.Context) error {
 	if err := c.Bind(body); err != nil {
 		log.Println(err)
 		resp["name"] = "unexpected"
-		resp["message"] = "An error occured when leaving the server."
+		resp["message"] = "An error occured when creating the invitation."
 
 		return c.JSON(http.StatusBadRequest, resp)
 	}
@@ -332,13 +346,6 @@ func (s *Server) HandlerCreateInvitation(c echo.Context) error {
 
 func (s *Server) HandlerChangeServerIcon(c echo.Context) error {
 	resp := make(map[string]any)
-
-	body := new(ChangeInformations)
-	if err := c.Bind(body); err != nil {
-		log.Println(err)
-		resp["message"] = "An error occured when changing your avatar."
-		return c.JSON(http.StatusBadRequest, resp)
-	}
 
 	cropX, _ := strconv.Atoi(c.FormValue("cropX"))
 	cropY, _ := strconv.Atoi(c.FormValue("cropY"))
@@ -473,5 +480,124 @@ func (s *Server) HandlerChangeServerIcon(c echo.Context) error {
 		Pub(globalEmitter, serverId, gws.OpcodeBinary, compMess)
 	}
 
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) HandlerChangeServerBanner(c echo.Context) error {
+	resp := make(map[string]any)
+
+	cropX, _ := strconv.Atoi(c.FormValue("cropX"))
+	cropY, _ := strconv.Atoi(c.FormValue("cropY"))
+	cropWidth, _ := strconv.Atoi(c.FormValue("cropWidth"))
+	cropHeight, _ := strconv.Atoi(c.FormValue("cropHeight"))
+	oldBannerName := c.FormValue("old_banner")
+	serverId := c.FormValue("server_id")
+
+	file, err := c.FormFile("banner")
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to get file")
+	}
+
+	if file.Size > 8*1024*1024 {
+		resp["message"] = "File size exceeds 8MB limit"
+		return c.JSON(http.StatusBadRequest, resp)
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to open file")
+	}
+	defer src.Close()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, src)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to read image")
+	}
+
+	imageBuffer := buf.Bytes()
+	mimeType := http.DetectContentType(imageBuffer)
+
+	var imageToUpload []byte
+	var bannerKey string
+	randId, _ := utils.GenerateRandomId(6)
+	if mimeType == "image/gif" {
+		cmd := exec.Command("gifsicle",
+			"--crop", fmt.Sprintf("%d,%d+%dx%d", cropX, cropY, cropWidth, cropHeight),
+			"--lossy=90",
+			"--output", "-",
+			"--", "-",
+		)
+
+		cmd.Stdin = bytes.NewReader(imageBuffer)
+		var outputBuf bytes.Buffer
+		cmd.Stdout = &outputBuf
+
+		err = cmd.Run()
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop GIF with gifsicle")
+		}
+
+		imageToUpload = outputBuf.Bytes()
+		bannerKey = strings.Split(serverId, ":")[1] + "-banner-" + randId + ".gif"
+
+	} else {
+		croppedImage, err := bimg.NewImage(imageBuffer).Extract(cropY, cropX, cropWidth, cropHeight)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to crop image")
+		}
+
+		imageToUpload, err = bimg.NewImage(croppedImage).Convert(bimg.JPEG)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to convert image to jpg")
+		}
+		bannerKey = strings.Split(serverId, ":")[1] + "-banner-" + randId + ".jpg"
+	}
+
+	go func() {
+		res, err := s.s3.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(oldBannerName),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+
+		_, err = s.s3.DeleteObject(&s3.DeleteObjectInput{
+			Bucket:    aws.String("Hudori"),
+			Key:       aws.String(oldBannerName),
+			VersionId: res.VersionId,
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err = s.s3.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String("Hudori"),
+			Key:    aws.String(bannerKey),
+			Body:   bytes.NewReader(imageToUpload),
+		})
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	wg.Wait()
+
+	banner, err := s.db.UpdateServerBanner(serverId, bannerKey)
+	if err != nil {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, "Failed to update link")
+	}
+
+	resp["banner"] = banner
+
+	resp["message"] = "success"
 	return c.JSON(http.StatusOK, resp)
 }

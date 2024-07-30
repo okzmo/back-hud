@@ -190,25 +190,25 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	sessionExpire, error := time.Parse(time.RFC3339, sess.ExpiresdAt)
-	if error != nil {
-		log.Println("error when creating the user session", err)
-		resp["name"] = "unexpected"
-		resp["message"] = "An error occured on sign in."
+	// sessionExpire, error := time.Parse(time.RFC3339, sess.ExpiresdAt)
+	// if error != nil {
+	// 	log.Println("error when creating the user session", err)
+	// 	resp["name"] = "unexpected"
+	// 	resp["message"] = "An error occured on sign in."
+	//
+	// 	return error
+	// }
 
-		return error
-	}
-
-	session := new(http.Cookie)
-	session.Name = "session"
-	session.Value = sess.ID
-	session.Path = "/"
-	session.Expires = sessionExpire
-	session.Domain = ".hudori.app"
-	session.HttpOnly = true
-	session.Secure = true
-	session.SameSite = http.SameSiteNoneMode
-	c.SetCookie(session)
+	// session := new(http.Cookie)
+	// session.Name = "session"
+	// session.Value = sess.ID
+	// session.Path = "/"
+	// session.Expires = sessionExpire
+	// session.Domain = ".hudori.app"
+	// session.HttpOnly = true
+	// session.Secure = true
+	// session.SameSite = http.SameSiteNoneMode
+	// c.SetCookie(session)
 
 	resp["message"] = "success"
 	resp["user"] = map[string]string{
@@ -222,6 +222,7 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 		"about_me":       user.AboutMe,
 		"username_color": user.UsernameColor,
 	}
+	resp["sessionId"] = sess.ID
 
 	return c.JSON(http.StatusOK, resp)
 }

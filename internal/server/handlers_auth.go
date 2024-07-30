@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -228,14 +229,16 @@ func (s *Server) HandlerSignIn(c echo.Context) error {
 func (s *Server) HandlerVerify(c echo.Context) error {
 	resp := make(map[string]any)
 
-	sessionCookie, err := c.Cookie("session")
-	if err != nil {
-		resp["message"] = "No session cookie available."
+	// sessionCookie, err := c.Cookie("session")
+	// if err != nil {
+	// 	resp["message"] = "No session cookie available."
+	//
+	// 	return c.JSON(http.StatusUnauthorized, resp)
+	// }
+	//
 
-		return c.JSON(http.StatusUnauthorized, resp)
-	}
-
-	session, err := s.db.GetSession(sessionCookie.Value)
+	sessId := c.Request().Header.Get("Authorization")
+	session, err := s.db.GetSession(strings.Split(sessId, " ")[1])
 	if err != nil {
 		log.Println(err)
 		resp["message"] = "No session related to given id."

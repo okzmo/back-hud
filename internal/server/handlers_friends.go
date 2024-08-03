@@ -26,6 +26,7 @@ type acceptFriendBody struct {
 
 type removeFriendBody struct {
 	UserId   string `json:"user_id"`
+	ServerId string `json:"space_id"`
 	FriendId string `json:"friend_id"`
 }
 
@@ -107,7 +108,7 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	users, err := s.db.AcceptFriend(body.RequestId, body.NotifId)
+	allInfos, err := s.db.AcceptFriend(body.RequestId, body.NotifId)
 	if err != nil {
 		log.Println("error when accepting friend request", err)
 		resp["message"] = "An error occured when accepting friend request."
@@ -115,18 +116,39 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	if conn, ok := s.ws.sessions.Load(strings.Split(users[0].ID, ":")[1]); ok {
+	if conn, ok := s.ws.sessions.Load(strings.Split(allInfos.Initiator.ID, ":")[1]); ok {
+		for _, channel := range allInfos.ServerChannels {
+			Sub(globalEmitter, channel, &Socket{conn})
+		}
+		Sub(globalEmitter, allInfos.Server.ID, &Socket{conn})
+
 		mess := &protoMess.WSMessage{
 			Type: "friend_accept",
 			Content: &protoMess.WSMessage_FriendAccept{
-				FriendAccept: &protoMess.User{
-					Id:          users[1].ID,
-					DisplayName: users[1].DisplayName,
-					Avatar:      users[1].Avatar,
-					AboutMe:     users[1].AboutMe,
-					Status:      users[1].Status,
+				FriendAccept: &protoMess.FriendAccept{
+					User: &protoMess.User{
+						Id:          allInfos.Receiver.ID,
+						DisplayName: allInfos.Receiver.DisplayName,
+						Avatar:      allInfos.Receiver.Avatar,
+						AboutMe:     allInfos.Receiver.AboutMe,
+						Status:      allInfos.Receiver.Status,
+					},
+					Server: &protoMess.Server{
+						Id:        allInfos.Server.ID,
+						Name:      allInfos.Server.Name,
+						Banner:    allInfos.Server.Banner,
+						Type:      allInfos.Server.Type,
+						CreatedAt: allInfos.Server.CreatedAt,
+					},
 				},
 			},
+		}
+
+		if conn, ok := s.ws.sessions.Load(strings.Split(allInfos.Receiver.ID, ":")[1]); ok {
+			for _, channel := range allInfos.ServerChannels {
+				Sub(globalEmitter, channel, &Socket{conn})
+			}
+			Sub(globalEmitter, allInfos.Server.ID, &Socket{conn})
 		}
 
 		data, err := proto.Marshal(mess)
@@ -140,7 +162,8 @@ func (s *Server) HandlerAcceptFriend(c echo.Context) error {
 	}
 
 	resp["message"] = "success"
-	resp["friend"] = users[0]
+	resp["friend"] = allInfos.Initiator
+	resp["server"] = allInfos.Server
 
 	return c.JSON(http.StatusOK, resp)
 }
@@ -180,7 +203,7 @@ func (s *Server) HandlerRemoveFriend(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, resp)
 	}
 
-	err := s.db.RemoveFriend(body.UserId, body.FriendId)
+	err := s.db.RemoveFriend(body.UserId, body.ServerId, body.FriendId)
 	if err != nil {
 		log.Println("error when refusing friend request", err)
 		resp["message"] = "An error occured when removing your friend."

@@ -1,17 +1,18 @@
 package models
 
 type User struct {
-	ID            string `json:"id,omitempty"`
-	Email         string `json:"email,omitempty"`
-	Password      string `json:"password,omitempty"`
-	Username      string `json:"username,omitempty"`
-	DisplayName   string `json:"display_name,omitempty"`
-	Avatar        string `json:"avatar,omitempty"`
-	Banner        string `json:"banner,omitempty"`
-	Status        string `json:"status,omitempty"`
-	AboutMe       string `json:"about_me"`
-	UsernameColor string `json:"username_color,omitempty"`
-	CreatedAt     string `json:"created_at,omitempty"`
+	ID            string  `json:"id,omitempty"`
+	Email         string  `json:"email,omitempty"`
+	Password      string  `json:"password,omitempty"`
+	Username      string  `json:"username,omitempty"`
+	DisplayName   string  `json:"display_name,omitempty"`
+	Avatar        string  `json:"avatar,omitempty"`
+	Banner        string  `json:"banner,omitempty"`
+	Status        string  `json:"status,omitempty"`
+	AboutMe       string  `json:"about_me"`
+	UsernameColor string  `json:"username_color,omitempty"`
+	CreatedAt     string  `json:"created_at,omitempty"`
+	SpaceId       *string `json:"space_id,omitempty"`
 }
 
 type Session struct {
@@ -32,6 +33,7 @@ type Server struct {
 	Roles      []string   `json:"roles,omitempty"`
 	Members    []User     `json:"members"`
 	CreatedAt  string     `json:"created_at,omitempty"`
+	Type       string     `json:"type,omitempty"`
 }
 
 type Category struct {

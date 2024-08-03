@@ -597,7 +597,26 @@ func (s *Server) HandlerChangeServerBanner(c echo.Context) error {
 	}
 
 	resp["banner"] = banner
-
 	resp["message"] = "success"
+
+	wsMess := &protoMess.WSMessage{
+		Type: "new_server_banner",
+		Content: &protoMess.WSMessage_ServerPic{
+			ServerPic: &protoMess.ChangeServerEl{
+				Id:      serverId,
+				Picture: banner,
+			},
+		},
+	}
+	data, err := proto.Marshal(wsMess)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	compMess := utils.CompressMess(data)
+	if serverId != "" {
+		Pub(globalEmitter, serverId, gws.OpcodeBinary, compMess)
+	}
 	return c.JSON(http.StatusOK, resp)
 }

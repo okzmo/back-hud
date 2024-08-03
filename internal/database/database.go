@@ -31,9 +31,9 @@ type Service interface {
 	EditMessage(messageId, content string, mentions []string) error
 	DeleteMessage(messageId string) error
 	RelateFriends(initiatorId, initiatorUsername, receiverUsername string) (models.FriendRequest, error)
-	AcceptFriend(requestId, notifId string) ([]models.User, error)
+	AcceptFriend(requestId, notifId string) (AcceptFriend, error)
 	RefuseFriend(requestId, notifId string) error
-	RemoveFriend(userId, FriendId string) error
+	RemoveFriend(userId, serverId, FriendId string) error
 	GetNotifications(userId string) (interface{}, error)
 	JoinServer(userId, serverId string) (jcServerReturn, error)
 	GetSubscribedChannels(userId string) ([]models.Channel, error)
@@ -189,7 +189,14 @@ func (s *service) DeleteSession(sessionId string) error {
 }
 
 func (s *service) GetFriends(userId string) ([]models.User, error) {
-	res, err := s.db.Query(`SELECT VALUE array::distinct((SELECT id, username, display_name, status, avatar, about_me, username_color FROM <->(friends WHERE accepted=true)<->users WHERE id != $userId)) FROM ONLY $userId;`,
+	res, err := s.db.Query(`
+    SELECT VALUE array::distinct((
+      SELECT id, username, display_name, status, avatar, about_me, username_color, 
+      array::first((SELECT VALUE space_id FROM $userId<->friends)) as space_id 
+    FROM <->(friends WHERE accepted=true)<->users 
+    WHERE id != $userId)) 
+    FROM ONLY $userId;
+    `,
 		map[string]interface{}{
 			"userId": userId,
 		})
@@ -236,7 +243,8 @@ func (s *service) GetUserServers(userId string) ([]models.Server, error) {
         out.name AS name,
         out.icon AS icon,
         out.banner AS banner,
-        out.created_at AS created_at
+        out.created_at AS created_at,
+        out.type as type
       FROM member WHERE in = $userId ORDER BY created_at ASC FETCH out;
     `, map[string]string{
 		"userId": userId,
@@ -617,8 +625,8 @@ func (s *service) RelateFriends(initiatorId, initiatorUsername, receiverUsername
 		"initiatorUsername": initiatorUsername,
 		"receiverUsername":  receiverUsername,
 	})
+	log.Println(relateFriends, err)
 	if err != nil {
-		log.Println(err)
 		return models.FriendRequest{}, fmt.Errorf("an error occured when adding your friend")
 	}
 
@@ -631,17 +639,73 @@ func (s *service) RelateFriends(initiatorId, initiatorUsername, receiverUsername
 	return notif, nil
 }
 
-func (s *service) AcceptFriend(requestId, notifId string) ([]models.User, error) {
+type AcceptFriend struct {
+	Initiator      models.User   `json:"initiator"`
+	Receiver       models.User   `json:"receiver"`
+	Server         models.Server `json:"server"`
+	ServerChannels []string      `json:"server_channels"`
+}
+
+func (s *service) AcceptFriend(requestId, notifId string) (AcceptFriend, error) {
 	res, err := s.db.Query(`
       BEGIN TRANSACTION;
       LET $users = SELECT initiator_id, user_id FROM ONLY $notifId;
       LET $initiator = SELECT id, username, display_name, status, avatar, about_me FROM ONLY $users.initiator_id;  
       LET $receiver = SELECT id, username, display_name, status, avatar, about_me FROM ONLY $users.user_id;
 
+      LET $textChannel = (CREATE ONLY channels CONTENT {
+        name: "Textual channel",
+        type: "textual",
+        private: false,
+      } RETURN id);
+
+      LET $voiceChannel = (CREATE ONLY channels CONTENT {
+        name: "Voice channel",
+        type: "voice",
+        private: false,
+      } RETURN id);
+
+      LET $server = (CREATE ONLY servers CONTENT {
+          banner: "",
+          icon: "",
+          type: "friend",
+          categories: [
+              {
+                channels: [
+                  $textChannel.id,
+                  $voiceChannel.id
+                ],
+                name: 'General'
+              }
+          ],
+          name: "Friendly space",
+      } RETURN AFTER);
+
+      LET $initiatorId = $initiator.id;
+      LET $receiverId = $receiver.id;
+      RELATE $initiatorId->member->$server SET roles = ["owner"];
+      RELATE $initiatorId->subscribed->[$textChannel.id, $voiceChannel.id];
+
+      RELATE $receiverId->member->$server SET roles = ["owner"];
+      RELATE $receiverId->subscribed->[$textChannel.id, $voiceChannel.id];
+
       UPDATE $requestId SET accepted=true;
+      UPDATE $requestId SET space_id=$server.id;
       DELETE $notifId;
 
-      RETURN [$initiator, $receiver];
+      RETURN {
+        initiator: $initiator,
+        receiver: $receiver,
+        server: {
+          id: $server.id,
+          name: $server.name,
+          icon: $server.icon,
+          banner: $server.banner,
+          created_at: $server.created_at,
+          type: $server.type
+        },
+        server_channels: array::flatten($server.categories.channels)
+      };
       COMMIT TRANSACTION;
     `, map[string]string{
 		"requestId": requestId,
@@ -649,16 +713,16 @@ func (s *service) AcceptFriend(requestId, notifId string) ([]models.User, error)
 	})
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		return AcceptFriend{}, err
 	}
 
-	users, err := surrealdb.SmartUnmarshal[[]models.User](res, err)
+	allInfos, err := surrealdb.SmartUnmarshal[AcceptFriend](res, err)
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		return AcceptFriend{}, err
 	}
 
-	return users, nil
+	return allInfos, nil
 }
 
 func (s *service) RefuseFriend(requestId, notifId string) error {
@@ -677,7 +741,7 @@ func (s *service) RefuseFriend(requestId, notifId string) error {
 	return nil
 }
 
-func (s *service) RemoveFriend(userId, friendId string) error {
+func (s *service) RemoveFriend(userId, serverId, friendId string) error {
 	_, err := s.db.Query(`
       DELETE friends WHERE (in=$userId AND out=$friendId) OR (in=$friendId AND out=$userId);
     `, map[string]string{
@@ -689,11 +753,26 @@ func (s *service) RemoveFriend(userId, friendId string) error {
 		return err
 	}
 
+	_, err = s.db.Query(`
+      BEGIN TRANSACTION;
+      LET $serverChannels = (SELECT VALUE array::flatten(categories.channels) FROM ONLY $serverId);
+      DELETE $serverId;
+      DELETE $serverChannels;
+      DELETE messages WHERE channel_id IN $serverChannels;
+      COMMIT TRANSACTION;
+	   `, map[string]string{
+		"serverId": serverId,
+	})
+	if err != nil {
+		log.Println(err)
+		return fmt.Errorf("an error occured while deleting the server")
+	}
+
 	return nil
 }
 
 func (s *service) GetNotifications(userId string) (interface{}, error) {
-	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId AND read=false ORDER BY created_at DESC", map[string]string{
+	res, err := s.db.Query("SELECT * FROM notifications WHERE user_id=$userId ORDER BY created_at DESC", map[string]string{
 		"userId": userId,
 	})
 	if err != nil {
@@ -706,7 +785,6 @@ func (s *service) GetNotifications(userId string) (interface{}, error) {
 		log.Println(err)
 		return models.FriendRequest{}, err
 	}
-	log.Println(notifs)
 
 	return notifs, err
 }
@@ -840,6 +918,7 @@ func (s *service) CreateServer(userId, name string) (jcServerReturn, error) {
               id: $server.id, 
               name: $server.name,
               icon: $server.icon,
+              type: $server.type
             },
             server_channels: array::flatten($server.categories.channels)
         };

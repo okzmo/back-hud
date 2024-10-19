@@ -269,12 +269,7 @@ func (s *Server) HandlerTyping(c echo.Context) error {
 	}
 
 	compMess := utils.CompressMess(data)
-
-	if connFriend, ok := s.ws.sessions.Load(body.ChannelId); ok {
-		connFriend.WriteMessage(gws.OpcodeBinary, compMess)
-	} else {
-		Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
-	}
+	Pub(globalEmitter, "channels:"+body.ChannelId, gws.OpcodeBinary, compMess)
 
 	return c.JSON(http.StatusOK, resp)
 }
